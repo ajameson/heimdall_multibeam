@@ -1,0 +1,78 @@
+// Implementation of the ClientSocket class
+
+#include "hd/client_socket.h"
+#include "hd/socket_exception.h"
+
+#include <iostream>
+#include <sstream>
+
+
+ClientSocket::ClientSocket ( std::string host, int port )
+{
+  if ( ! Socket::create() )
+    {
+      throw SocketException ( "Could not create client socket." );
+    }
+
+  if ( ! Socket::connect ( host, port ) )
+    {
+      throw SocketException ( "Could not bind to port." );
+    }
+
+}
+
+
+const ClientSocket& ClientSocket::operator << ( const std::string& s ) const
+{
+  if ( ! Socket::send ( s ) )
+    {
+      throw SocketException ( "Could not write to socket." );
+    }
+
+  return *this;
+}
+
+const ClientSocket& ClientSocket::operator << ( const char * s ) const
+{
+  if ( ! Socket::send ( std::string(s) ) )
+    {
+      throw SocketException ( "Could not write to socket." );
+    }
+
+  return *this;
+}
+
+const ClientSocket& ClientSocket::operator << ( const size_t n ) const
+{
+  std::ostringstream oss (std::ostringstream::out);
+  oss << n;
+  if ( ! Socket::send ( std::string( oss.str() ) ) )
+    {
+      throw SocketException ( "Could not write to socket." );
+    }
+
+  return *this;
+}
+
+const ClientSocket& ClientSocket::operator << ( const float f ) const
+{
+  std::ostringstream oss (std::ostringstream::out);
+  oss << f;
+  if ( ! Socket::send ( std::string( oss.str() ) ) )
+    {
+      throw SocketException ( "Could not write to socket." );
+    }
+
+  return *this;
+}
+
+
+const ClientSocket& ClientSocket::operator >> ( std::string& s ) const
+{
+  if ( ! Socket::recv ( s ) )
+    {
+      throw SocketException ( "Could not read from socket." );
+    }
+
+  return *this;
+}

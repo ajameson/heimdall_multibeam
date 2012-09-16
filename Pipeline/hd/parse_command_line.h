@@ -1,0 +1,15 @@
+
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "hd/params.h"
+
+int hd_parse_command_line(int argc, char* argv[], hd_params* params);
+void hd_print_usage();
+
+#ifdef __cplusplus
+} // closing brace for extern "C"
+#endif
