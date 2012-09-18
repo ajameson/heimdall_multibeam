@@ -7,7 +7,6 @@ using std::endl;
 #include "hd/header.h"
 #include "hd/sigproc_file.h"
 
-#include "tmutil.h"
 #include "dada_def.h"
 
 FileDataSource::FileDataSource (const char* filename)

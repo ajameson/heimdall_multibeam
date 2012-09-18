@@ -7,7 +7,7 @@ AC_DEFUN([SWIN_LIB_DEDISP],
   AC_REQUIRE([SWIN_PACKAGE_OPTIONS])
   SWIN_PACKAGE_OPTIONS([dedisp])
 
-  AC_MSG_CHECKING([for DEDISP Library (bbarsdell) installation])
+  AC_MSG_CHECKING([for DEDISP Library installation])
 
   if test x"$DEDISP" == x; then
     DEDISP=dedisp
@@ -16,11 +16,12 @@ AC_DEFUN([SWIN_LIB_DEDISP],
   if test "$have_dedisp" != "user disabled"; then
 
     SWIN_PACKAGE_FIND([dedisp],[dedisp.h])
-    SWIN_PACKAGE_TRY_COMPILE([dedisp],[#include <dedisp.h>])
+    SWIN_PACKAGE_TRY_COMPILE([dedisp],[#include <dedisp.h>],
+													   [dedisp_get_error_string (DEDISP_NO_ERROR);])
 
     SWIN_PACKAGE_FIND([dedisp],[lib$DEDISP.*])
     SWIN_PACKAGE_TRY_LINK([dedisp],[#include <dedisp.h>],
-                          [ dedisp_get_error_string (DEDISP_NO_ERROR);],
+                          [dedisp_get_error_string (DEDISP_NO_ERROR);],
                           [-l$DEDISP])
 
   fi

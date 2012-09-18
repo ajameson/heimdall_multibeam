@@ -10,7 +10,7 @@ libhdpipeline_la_SOURCES = default_params.C error.C parse_command_line.C clean_f
 include_HEADERS = 
 
 # To find the dedisp lib from bbarsdell
-AM_CPPFLAGS = -I../ -I../Network -I$(HOME) @DEDISP_CFLAGS@
+AM_CPPFLAGS = -I../ -I../Network @DEDISP_CFLAGS@ @THRUST_CFLAGS@ @CUDA_CFLAGS@
 
 include $(top_srcdir)/config/Makefile.targets
 

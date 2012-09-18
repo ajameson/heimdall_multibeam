@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.67])
+AC_PREREQ([2.57])
 AC_INIT([HEIMDALL], [0.1], [ajameson@swin.edu.au])
 
 AC_CONFIG_SRCDIR([Applications/heimdall.C])
@@ -40,6 +40,7 @@ CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 SWIN_LIB_DEDISP
 SWIN_LIB_CUDA
 SWIN_LIB_PSRDADA
+SWIN_LIB_THRUST
 
 # Checks for header files.
 AC_HEADER_STDC
