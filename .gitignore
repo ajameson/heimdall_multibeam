@@ -9,6 +9,7 @@ Makefile.in
 Makefile
 Applications/heimdall
 Applications/coincidencer
+Applications/coincidencer_client
 Applications/Makefile
 Formats/Makefile
 Network/Makefile
