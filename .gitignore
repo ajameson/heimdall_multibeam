@@ -5,11 +5,21 @@
 *.la
 *.deps
 *.libs
-#Makefile.in
-Makefile *.o
-
+Makefile.in
+Makefile
 Applications/heimdall
 Applications/coincidencer
+Applications/Makefile
+Formats/Makefile
+Network/Makefile
+Pipeline/Makefile
+Scripts/Makefile
+config.guess
+config.status
+config.sub
+configure
+libtool
+stamp-h1
 
 aclocal.m4
 autom4te.cache/
