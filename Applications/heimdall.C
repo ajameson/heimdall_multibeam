@@ -13,11 +13,11 @@ using std::endl;
 #include "hd/pipeline.h"
 #include "hd/error.h"
 
-//#include "dada_hdu.h"
+// input formats supported
+#include "hd/DataSource.h"
+#include "hd/PSRDadaRingBuffer.h"
+#include "hd/SigprocFile.h"
 
-//#include "hd/header.h" // For FileDataSource
-#include "hd/psrdada_ring_buffer.h"
-#include "hd/sigproc_file.h"
 #include "hd/stopwatch.h"
 
 int main(int argc, char* argv[]) 
@@ -30,17 +30,17 @@ int main(int argc, char* argv[])
 	if (ok < 0)
 		return 1;
 	
-	IDataSource* data_source = 0;
+	DataSource* data_source = 0;
 	
 	if( params.dada_id != 0 ) {
 
 		if (params.verbosity)
 			cerr << "Createing PSRDADA client" << endl;
 
-		DadaDataSource * d = new DadaDataSource(params.dada_id);
+		PSRDadaRingBuffer * d = new PSRDadaRingBuffer(params.dada_id);
 
 		// Read from psrdada ring buffer
-		if( !d || d->error() ) {
+		if( !d || d->get_error() ) {
 			cerr << "ERROR: Failed to initialise connection to psrdada" << endl;
 			return -1;
 		}
@@ -64,34 +64,39 @@ int main(int argc, char* argv[])
 			return -1;
 		}
 
-		data_source = (IDataSource *) d;
+		data_source = (DataSource *) d;
     if (!params.override_beam)
-      params.beam = d->beam() - 1;
+      params.beam = d->get_beam() - 1;
 	}
 	else 
 	{
 		// Read from filterbank file
-		data_source = new FileDataSource(params.sigproc_file);
-		if( !data_source || data_source->error() ) {
+		data_source = new SigprocFile(params.sigproc_file);
+		if( !data_source || data_source->get_error() ) {
 			cerr << "ERROR: Failed to open data file" << endl;
 			return -1;
 		}
 	}
 
   if (!params.override_beam)
-    if (data_source->beam() > 0)
-      params.beam = data_source->beam() - 1;
+    if (data_source->get_beam() > 0)
+      params.beam = data_source->get_beam() - 1;
     else
       params.beam = 0;
 
+	params.f0 = data_source->get_f0();
+	params.df = data_source->get_df();
+	params.dt = data_source->get_tsamp();
+
   cout << "processing beam " << (params.beam+1)  << endl;
 
-  float tsamp = data_source->tsamp() / 1000000;
-	size_t stride = data_source->stride();
-	size_t nbits  = data_source->nbits();
-	params.nchans = data_source->nchans();
-  params.utc_start = data_source->utc_start();
-  params.spectra_per_second = data_source->spectra_per_second();
+  float tsamp = data_source->get_tsamp() / 1000000;
+	size_t stride = data_source->get_stride();
+	size_t nbits  = data_source->get_nbit();
+
+	params.nchans = data_source->get_nchan();
+  params.utc_start = data_source->get_utc_start();
+  params.spectra_per_second = data_source->get_spectra_rate();
 
 	if ( params.verbosity >= 2)
 		cout << "allocating filterbank data vector for " << nsamps_gulp << " samples with size " << (nsamps_gulp * stride) << " bytes" << endl;
