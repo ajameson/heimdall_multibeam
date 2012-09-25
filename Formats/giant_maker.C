@@ -1,3 +1,9 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell 
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
 
 /*
   TODO: Sort out quantisation scaling

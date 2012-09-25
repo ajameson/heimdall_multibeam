@@ -1,9 +1,15 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
 
 #include <iostream>
 #include <string>
 
-#include "hd/client_socket.h"
-#include "hd/socket_exception.h"
+#include "hd/ClientSocket.h"
+#include "hd/SocketException.h"
 
 using namespace std;
 

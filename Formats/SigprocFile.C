@@ -1,3 +1,9 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
 
 #include <iostream>
 using std::cout;
@@ -10,7 +16,7 @@ using std::endl;
 #include "dada_def.h"
 
 SigprocFile::SigprocFile (const char* filename)
-  : m_file_stream(filename, std::ios::binary)
+  : m_file_stream(filename, std::ios::binary), DataSource ()
 {
   m_error = 0;
 

@@ -1,4 +1,10 @@
-
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
+:wn
 
 cpp_objects: $(CPP_SOURCES) $(HEADERS)
 	$(GXX) -c $(GXX_FLAGS) $(INCLUDE) $(CPP_SOURCES)

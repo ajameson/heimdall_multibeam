@@ -1,3 +1,9 @@
+/***************************************************************************
+ *  *
+ *   *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *    *   Licensed under the Academic Free License version 2.1
+ *     *
+ *      ***************************************************************************/
 
 #pragma once
 

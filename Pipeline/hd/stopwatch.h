@@ -1,3 +1,10 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
+
 #ifndef _STOPWATCH_H
 #define _STOPWATCH_H
 

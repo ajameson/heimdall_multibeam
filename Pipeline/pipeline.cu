@@ -1,3 +1,9 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
 
 #include <vector>
 #include <memory>
@@ -30,8 +36,8 @@ using thrust::device_vector;
 #include "hd/label_candidate_clusters.h"
 #include "hd/merge_candidates.h"
 
-#include "hd/client_socket.h"
-#include "hd/socket_exception.h"
+#include "hd/ClientSocket.h"
+#include "hd/SocketException.h"
 #include "hd/stopwatch.h"         // For benchmarking
 //#include "write_time_series.h" // For debugging
 

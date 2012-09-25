@@ -1,10 +1,15 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
 
 #include "hd/clean_filterbank_rfi.h"
 #include "hd/remove_baseline.h"
 #include "hd/get_rms.h"
 #include "hd/measure_bandpass.h"
 #include "hd/matched_filter.h"
-
 
 #include <vector>
 #include <dedisp.h>

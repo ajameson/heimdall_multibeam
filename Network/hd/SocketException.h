@@ -5,16 +5,22 @@
  *
  ***************************************************************************/
 
-#pragma once
+#ifndef hd_SocketException
+#define hd_SocketException
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <string>
 
-#include "hd/params.h"
+class SocketException
+{
+  public:
+    SocketException ( std::string s ) : m_s ( s ) {};
+    ~SocketException (){};
 
-void hd_set_default_params(hd_params* params);
+    std::string description() { return m_s; }
 
-#ifdef __cplusplus
-} // closing brace for extern "C"
+  private:
+    std::string m_s;
+
+};
+
 #endif

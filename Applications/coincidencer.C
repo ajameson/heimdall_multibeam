@@ -1,3 +1,9 @@
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
 
 #include <iostream>
 #include <sstream>
@@ -16,8 +22,8 @@ using namespace std;
 #include <string.h>
 
 #include "hd/Candidates.h"
-#include "hd/server_socket.h"
-#include "hd/socket_exception.h"
+#include "hd/ServerSocket.h"
+#include "hd/SocketException.h"
 
 int quit_threads = 0;
 

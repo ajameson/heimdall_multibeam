@@ -1,6 +1,11 @@
-// Implementation of the Socket class.
+/***************************************************************************
+ *
+ *   Copyright (C) 2012 by Ben Barsdell and Andrew Jameson
+ *   Licensed under the Academic Free License version 2.1
+ *
+ ***************************************************************************/
 
-#include "hd/socket.h"
+#include "hd/Socket.h"
 
 #include <stdio.h>
 
@@ -78,9 +83,7 @@ bool Socket::bind ( const char * address, const int port )
 
 
   if ( bind_return == -1 )
-  {
     return false;
-  }
 
   return true;
 }
@@ -89,17 +92,12 @@ bool Socket::bind ( const char * address, const int port )
 bool Socket::listen() const
 {
   if ( ! is_valid() )
-  {
     return false;
-  }
 
   int listen_return = ::listen ( m_sock, MAXCONNECTIONS );
 
-
   if ( listen_return == -1 )
-  {
     return false;
-  }
 
   return true;
 }
@@ -116,20 +114,14 @@ bool Socket::accept ( Socket& new_Socket ) const
     return true;
 }
 
-
 bool Socket::send ( const std::string s ) const
 {
   int status = ::send ( m_sock, s.c_str(), s.size(), MSG_NOSIGNAL );
   if ( status == -1 )
-    {
-      return false;
-    }
+    return false;
   else
-    {
-      return true;
-    }
+    return true;
 }
-
 
 int Socket::recv ( std::string& s ) const
 {
@@ -184,16 +176,13 @@ bool Socket::connect ( const std::string address, const int port )
 
 void Socket::set_non_blocking ( const bool b )
 {
-
   int opts;
 
   opts = fcntl ( m_sock,
      F_GETFL );
 
   if ( opts < 0 )
-    {
-      return;
-    }
+    return;
 
   if ( b )
     opts = ( opts | O_NONBLOCK );
