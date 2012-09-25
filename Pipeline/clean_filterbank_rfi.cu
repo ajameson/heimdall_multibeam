@@ -479,8 +479,8 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
     return error;
   }
   // AJ always kill channels 0 -> 153.6 TODO paramterise this!!!!
-  for (unsigned i=0; i<150; i++)
-    h_killmask[i] = 0;
+  //for (unsigned i=0; i<150; i++)
+  //  h_killmask[i] = 0;
   
   return HD_NO_ERROR;
 }

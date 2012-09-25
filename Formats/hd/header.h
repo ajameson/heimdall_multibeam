@@ -18,6 +18,7 @@
 
 struct SigprocHeader {
 	std::string source_name;
+	std::string rawdatafile;
 	double az_start;
 	double za_start;
 	double src_raj;
@@ -140,12 +141,14 @@ bool read_header(BinaryStream& stream, Header& header) {
 	}
 	
 	bool expecting_source_name = false;
+	bool expecting_rawdatafile = false;
 	
 	while( true ) {
 		ret = detail::header_read(stream, s);
 		
 		if( s == "HEADER_END" ) break;
 		else if( s == "source_name" )   expecting_source_name = true;
+		else if( s == "rawdatafile" )   expecting_rawdatafile = true;
 		else if( s == "az_start" )      stream.read((char*)(char*)&header.az_start, sizeof(double));
 		else if( s == "za_start" )      stream.read((char*)&header.za_start, sizeof(double));
 		else if( s == "src_raj" )       stream.read((char*)&header.src_raj, sizeof(double));
@@ -173,6 +176,10 @@ bool read_header(BinaryStream& stream, Header& header) {
 		else if( expecting_source_name ) {
 			header.source_name = s;
 			expecting_source_name = false;
+		}
+	  else if( expecting_rawdatafile) {
+	    header.rawdatafile = s;
+	    expecting_rawdatafile = false;
 		}
 		else {
 			std::cerr << "Warning: read_header: unknown parameter " << s << std::endl;

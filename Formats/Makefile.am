@@ -3,7 +3,7 @@ INCLUDES = -I$(top_srcdir)/src
 
 lib_LTLIBRARIES = libhdformats.la
 
-libhdformats_la_SOURCES = psrdada_ring_buffer.C sigproc_file.C 
+libhdformats_la_SOURCES = PSRDadaRingBuffer.C SigprocFile.C 
 
 include_HEADERS = 
 
