@@ -730,10 +730,12 @@ hd_error hd_execute(hd_pipeline pl,
 
   char buffer[64];
   time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
-  strftime (buffer, 64, DADA_TIMESTR, (struct tm*) localtime(&now));
+  strftime (buffer, 64, DADA_TIMESTR, (struct tm*) gmtime(&now));
 
   std::stringstream ss;
   ss << std::setw(2) << std::setfill('0') << (pl->params.beam)%13+1;
+
+  std::ostringstream oss;
 
   if ( pl->params.coincidencer_host != NULL && pl->params.coincidencer_port != -1 )
   {
@@ -741,21 +743,25 @@ hd_error hd_execute(hd_pipeline pl,
     {
       ClientSocket client_socket ( pl->params.coincidencer_host, pl->params.coincidencer_port );
 
-      strftime (buffer, 64, DADA_TIMESTR, (struct tm*) localtime(&(pl->params.utc_start)));
-      client_socket <<  buffer << " ";
+      strftime (buffer, 64, DADA_TIMESTR, (struct tm*) gmtime(&(pl->params.utc_start)));
+
+      oss <<  buffer << " ";
 
       time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
-      strftime (buffer, 64, DADA_TIMESTR, (struct tm*) localtime(&now));
-      client_socket << buffer << " ";
+      strftime (buffer, 64, DADA_TIMESTR, (struct tm*) gmtime(&now));
+      oss << buffer << " ";
 
-      client_socket << first_idx << " ";
-      client_socket << ss.str() << " ";
-      client_socket << h_group_peaks.size() << "\r\n";
+      oss << first_idx << " ";
+      oss << ss.str() << " ";
+      oss << h_group_peaks.size() << endl;
+      client_socket << oss.str();
+      oss.flush();
+      oss.str("");
 
       for (hd_size i=0; i<h_group_peaks.size(); ++i ) 
       {
         hd_size samp_idx = first_idx + h_group_inds[i];
-        client_socket << h_group_peaks[i] << "\t"
+        oss << h_group_peaks[i] << "\t"
                       << samp_idx << "\t"
                       << samp_idx * pl->params.dt << "\t"
                       << h_group_filter_inds[i] << "\t"
@@ -763,20 +769,22 @@ hd_error hd_execute(hd_pipeline pl,
                       << h_group_dms[i] << "\t"
                       << h_group_members[i] << "\t"
                       << first_idx + h_group_begins[i] << "\t"
-                      << first_idx + h_group_ends[i] << "\t"
-                      << "\r\n";
+                      << first_idx + h_group_ends[i] << endl;
+
+        client_socket << oss.str();
+        oss.flush();
+        oss.str("");
       }
       // client_socket should close when it goes out of scope...
     }
-
     catch (SocketException& e )
     {
       std::cerr << "SocketException was caught:" << e.description() << "\n";
     }
 
   }
-  else
-  {
+  //else
+  //{
 
     // HACK %13
 
@@ -814,7 +822,7 @@ hd_error hd_execute(hd_pipeline pl,
     else
       cout << "Skipping dump due to bad file open on " << filename << endl;
     cand_file.close();
-  }
+  //}
     
   stop_timer(candidates_timer);
   

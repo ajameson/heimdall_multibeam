@@ -7,12 +7,11 @@
 
 using namespace std;
 
-int main ( int argc, int argv[] )
+int main ( int argc, char * argv[] )
 {
   try
     {
-
-      ClientSocket client_socket ( "localhost", 30000 );
+      ClientSocket client_socket ( "192.168.0.10", 51041 );
 
       std::string reply;
 

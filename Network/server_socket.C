@@ -4,14 +4,14 @@
 #include "hd/socket_exception.h"
 
 
-ServerSocket::ServerSocket ( int port )
+ServerSocket::ServerSocket ( char * address, int port )
 {
   if ( ! Socket::create() )
     {
       throw SocketException ( "Could not create server socket." );
     }
 
-  if ( ! Socket::bind ( port ) )
+  if ( ! Socket::bind ( address, port ) )
     {
       throw SocketException ( "Could not bind to port." );
     }
@@ -50,10 +50,26 @@ const ServerSocket& ServerSocket::operator >> ( std::string& s ) const
   return *this;
 }
 
+const ServerSocket& ServerSocket::operator >> ( std::stringstream& ss ) const
+{
+  std::string s;
+  if ( ! Socket::recv ( s ) )
+  {
+    throw SocketException ( "Could not read from socket." );
+  }
+  return *this;
+}
+
+
 void ServerSocket::accept ( ServerSocket& sock )
 {
   if ( ! Socket::accept ( sock ) )
     {
       throw SocketException ( "Could not accept socket." );
     }
+}
+
+int ServerSocket::select (float sleep_seconds )
+{
+  return Socket::select_timeout (sleep_seconds );
 }

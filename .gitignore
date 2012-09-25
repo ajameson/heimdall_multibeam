@@ -1,5 +1,4 @@
 *.swp
-
 *.o
 *.lo
 *.la
@@ -10,6 +9,7 @@ Makefile
 Applications/heimdall
 Applications/coincidencer
 Applications/coincidencer_client
+Applications/candidate_profiler
 Applications/Makefile
 Formats/Makefile
 Network/Makefile
@@ -21,7 +21,6 @@ config.sub
 configure
 libtool
 stamp-h1
-
 aclocal.m4
 autom4te.cache/
 config.h

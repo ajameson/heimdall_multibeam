@@ -10,14 +10,17 @@ class ServerSocket : private Socket
 {
  public:
 
-  ServerSocket ( int port );
+  ServerSocket ( char * address, int port );
   ServerSocket (){};
   virtual ~ServerSocket();
 
   const ServerSocket& operator << ( const std::string& ) const;
   const ServerSocket& operator >> ( std::string& ) const;
+  const ServerSocket& operator >> ( std::stringstream& ) const;
 
   void accept ( ServerSocket& );
+  int select (float sleep_seconds );
+
 
 };
 

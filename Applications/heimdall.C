@@ -120,12 +120,11 @@ int main(int argc, char* argv[])
   //Stopwatch pipeline_timer;
 
 	size_t total_nsamps = 0;
-	size_t nsamps_read = data_source->get_data(nsamps_gulp,
-	                                           (char*)&filterbank[0]);
+	size_t nsamps_read = data_source->get_data (nsamps_gulp, (char*)&filterbank[0]);
 	size_t overlap = 0;
 	while( nsamps_read && !stop_requested ) {
 		
-		if( params.verbosity >= 1 ) {
+		if ( params.verbosity >= 1 ) {
 			cout << "Executing pipeline on new gulp of " << nsamps_read
 			     << " samples..." << endl;
 		}

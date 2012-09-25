@@ -4,13 +4,13 @@ INCLUDES = -I$(top_srcdir)/src
 
 include_HEADERS = 
 
-bin_PROGRAMS = heimdall coincidencer coincidencer_client
+bin_PROGRAMS = heimdall coincidencer coincidencer_client candidate_profiler
 
 # To find the dedisp lib from bbarsdell
 AM_CPPFLAGS = -I../ -I../Formats -I../Network -I../Pipeline -I$(HOME) @PSRDADA_CFLAGS@ @DEDISP_CFLAGS@
 
 heimdall_SOURCES = heimdall.C
-coincidencer_SOURCES = coincidencer.C
+coincidencer_SOURCES = coincidencer.C Candidates.C
 coincidencer_client_SOURCES = coincidencer_client.C
 
 LDADD = $(top_builddir)/Formats/libhdformats.la \

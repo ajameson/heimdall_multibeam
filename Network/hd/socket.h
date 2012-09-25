@@ -25,7 +25,7 @@ class Socket
 
   // Server initialization
   bool create();
-  bool bind ( const int port );
+  bool bind ( const char * address, const int port );
   bool listen() const;
   bool accept ( Socket& ) const;
 
@@ -36,16 +36,17 @@ class Socket
   bool send ( const std::string ) const;
   int recv ( std::string& ) const;
 
-
   void set_non_blocking ( const bool );
 
   bool is_valid() const { return m_sock != -1; }
 
+  int select_timeout ( float sleep_secs );
+
  private:
 
   int m_sock;
-  sockaddr_in m_addr;
 
+  sockaddr_in m_addr;
 
 };
 

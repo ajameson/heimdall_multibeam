@@ -5,6 +5,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 #include <string>
+#include <sstream>
 #include <string.h>
 using std::string;
 #include <cstdlib>
@@ -111,11 +112,15 @@ int hd_parse_command_line(int argc, char* argv[], hd_params* params)
     else if( argv[i] == string("-min_tscrunch_width") ) {
       params->min_tscrunch_width = atoi(argv[++i]);
     }
-    else if( argv[i] == string("-coincidener_host") ) {
-      params->coincidencer_host = strdup(argv[++i]);
+    else if( argv[i] == string("-coincidencer") ) {
+      std::istringstream iss (argv[++i], std::istringstream::in);
+      string host, port;
+      getline(iss, host, ':');
+      getline(iss, port); 
+      params->coincidencer_host = strdup(host.c_str());
+      params->coincidencer_port = atoi(port.c_str());
     }
     else if( argv[i] == string("-coincidener_port") ) {
-      params->coincidencer_port = atoi(argv[++i]);
     }
     else {
       cerr << "WARNING: Unknown parameter '" << argv[i] << "'" << endl;
@@ -146,9 +151,10 @@ void hd_print_usage()
   cout << "    -gpu_id ID               run on specified GPU" << endl;
   cout << "    -nsamps_gulp num         number of samples to be read at a time [" << p.nsamps_gulp << "]" << endl;
   cout << "    -baseline_length num     TBA" << endl;
-  cout << "    -beam ## 					      over-ride beam number" << endl;
+  cout << "    -beam ##                 over-ride beam number" << endl;
   cout << "    -output_dir path         create all output files in specified path" << endl;
   cout << "    -dm min max              min and max DM" << endl;
+  cout << "    -coincidencer host:port  connect to the coincidencer on the specified host and port" << endl;
   cout << "    -dm_pulse_width num      TBA" << endl;
   cout << "    -dm_nbits num            TBA" << endl;
   cout << "    -scrunching num          TBA" << endl;
