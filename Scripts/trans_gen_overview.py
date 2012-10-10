@@ -321,6 +321,8 @@ class TextOutput(object):
             sys.stdout.write ("<candidate snr='" + str(data['valid']['snr'][i]) + \
                                        "' time='" + str(data['valid']['time'][i]) + \
                                        "' dm='" + str(data['valid']['dm'][i]) + \
+                                       "' samp_idx='" + str(data['valid']['samp_idx'][i]) + \
+                                       "' filter='" + str(data['valid']['filter'][i]) + \
                                        "' prim_beam='" + str(data['valid']['prim_beam'][i] + 1) + "'/>\n")
 
 

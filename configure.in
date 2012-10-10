@@ -80,5 +80,6 @@ AC_CONFIG_FILES([Applications/Makefile
                  Makefile
                  Network/Makefile
                  Pipeline/Makefile
+                 Share/Makefile
                  Scripts/Makefile])
 AC_OUTPUT

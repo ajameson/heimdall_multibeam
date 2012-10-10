@@ -20,6 +20,7 @@ using std::vector;
 #include <cstdlib> // For atoi
 #include <cmath>
 #include <algorithm>
+#include <inttypes.h>
 
 #include "hd/header.h"
 #include <dedisp.h>
@@ -135,7 +136,7 @@ int normalise_series_array(float* out, size_t nsamps, size_t nseries) {
 int gen_freq_time_plot(string filename,
                        size_t samp, size_t filter, float dm,
                        size_t out_nsamps, size_t fscrunch,
-                       float* out) {
+                       float* out, bool verbose) {
 	typedef unsigned int word_type;
 	
 	std::ifstream in_file(filename.c_str(), std::ios::binary);
@@ -161,15 +162,20 @@ int gen_freq_time_plot(string filename,
 	dedisp_set_dm_list(plan, &dm, 1);
 	size_t max_delay = dedisp_get_max_delay(plan);
 	dedisp_destroy_plan(plan);
+
+  cerr << "dedisp_get_max_delay=" << max_delay << endl;
 	
 	size_t tscrunch    = 1<<filter;
 	size_t in_nsamps   = out_nsamps * tscrunch;
 	size_t centre_samp = samp + max_delay/2;
 	size_t first_samp  = centre_samp - in_nsamps/2;
-	
-	cerr << "Input sample range: "
-	     << first_samp << " : " << first_samp+in_nsamps << " = " << in_nsamps << " samples" << endl;
-  cerr << "DM = " << dm << endl;
+
+  if (verbose)
+  {	
+	  cerr << "Input sample range: "
+	       << first_samp << " : " << first_samp+in_nsamps << " = " << in_nsamps << " samples" << endl;
+    cerr << "DM = " << dm << endl;
+  }
 	
 	size_t chans_per_word = sizeof(word_type)*8/header.nbits;
 	size_t mask         = ((unsigned)1<<header.nbits) - 1;//(((unsigned)1<<(header.nbits-1))-1)*2+1;
@@ -213,7 +219,7 @@ int gen_dm_time_plot(string filename,
                      size_t samp, size_t filter, size_t dm_idx,
                      size_t out_nsamps, size_t out_dm_count,
                      float* out,
-                     bool do_filter=true) {
+                     bool do_filter=true, bool verbose=false) {
 	typedef float out_type;
 	
 	// Scrunching parameters
@@ -230,9 +236,12 @@ int gen_dm_time_plot(string filename,
 	SigprocHeader header;
 	read_header(in_file, header);
 	
-	cerr << "dt = " << header.tsamp << endl;
-	cerr << "f0 = " << header.fch1 << endl;
-	cerr << "df = " << header.foff << endl;
+  if (verbose)
+  {
+	  cerr << "dt = " << header.tsamp << endl;
+	  cerr << "f0 = " << header.fch1 << endl;
+	  cerr << "df = " << header.foff << endl;
+  }
 	
 	dedisp_error error;
 	dedisp_plan  plan;
@@ -248,10 +257,14 @@ int gen_dm_time_plot(string filename,
 	// Set up DM list
 	size_t dm_begin = dm_idx >= out_dm_count/2            ? dm_idx - out_dm_count/2 : 0;
 	size_t dm_end   = dm_idx <  dm_count - ((out_dm_count-1)/2+1) ? dm_idx + (out_dm_count-1)/2+1 : dm_count;
-	cerr << "Target DM      = " << dm_list[dm_idx] << endl;
-	cerr << "DM trial range = " << dm_begin << " : " << dm_end << endl;
+  if (verbose)
+  {
+	  cerr << "Target DM      = " << dm_list[dm_idx] << endl;
+	  cerr << "DM trial range = " << dm_begin << " : " << dm_end << endl;
+  }
 	out_dm_count = dm_end - dm_begin;
-  cerr << "Out DM count = " << out_dm_count << endl;
+  if (verbose)
+    cerr << "Out DM count = " << out_dm_count << endl;
 	error = dedisp_set_dm_list(plan, &dm_list[dm_begin], out_dm_count);
 	if( error != DEDISP_NO_ERROR ) {
 		cerr << "dedisp_set_dm_list failed: "
@@ -292,12 +305,14 @@ int gen_dm_time_plot(string filename,
 	}
 	// TODO: Ensure sample index is within upper bound
 	
-	cerr << "Max dispersion delay = " << dedisp_get_max_delay(plan) << endl;
-	
-	cerr << "Input sample range = "
-	     << first_samp << " : "
-	     << first_samp+in_nsamps << endl;
-	cerr << "(" << in_nsamps << " samples)" << endl;
+  if (verbose)
+  {
+    cerr << "Max dispersion delay = " << dedisp_get_max_delay(plan) << endl;
+    cerr << "Input sample range = "
+         << first_samp << " : "
+         << first_samp+in_nsamps << endl;
+    cerr << "(" << in_nsamps << " samples)" << endl;
+  }
 	
 	vector<dedisp_byte> in(in_nsamps * nchan_bytes);
 	
@@ -403,6 +418,12 @@ void usage(char * binary)
   cerr << "    do_filter           not sure - Ben?" << endl;
 }
 
+bool IsNan( float f)
+{ 
+  union { float f; uint32_t x; } u = { f };
+  return (u.x << 1) > 0xff000000u;
+}
+
 int main(int argc, char* argv[])
 {
 	if ( argc <= 8 ) 
@@ -412,6 +433,7 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 	bool do_filter = false;
+  bool verbose = true;
 	
 	string input_name   = argv[1];
 	string dmlist_name  = argv[2];
@@ -425,17 +447,20 @@ int main(int argc, char* argv[])
 		do_filter = atoi(argv[9]);
 	}
 	
-	if( do_filter ) {
-		cerr << "Filtering enabled" << endl;
-	}
-	else {
-		cerr << "Filtering disabled" << endl;
-	}
+  if (verbose)
+  {
+	  if( do_filter ) {
+		  cerr << "Filtering enabled" << endl;
+	  }
+	  else {
+		  cerr << "Filtering disabled" << endl;
+	  }
 	
-	cerr << "out_nsamps   = " << out_nsamps << endl;
-	cerr << "out_dm_count = " << out_dm_count << endl;
-	
-	cerr << "Reading header info..." << endl;
+  	cerr << "out_nsamps   = " << out_nsamps << endl;
+	  cerr << "out_dm_count = " << out_dm_count << endl;
+	  cerr << "Reading header info..." << endl;
+  }
+
 	std::ifstream in_file(input_name.c_str(), std::ios::binary);
 	if( !in_file ) {
 		cerr << "ERROR: Could not open " << input_name << endl;
@@ -445,7 +470,8 @@ int main(int argc, char* argv[])
 	read_header(in_file, header);
 	in_file.close();
 	
-	cerr << "Loading DM list '" << dmlist_name << "'..." << endl;
+  if (verbose)
+	  cerr << "Loading DM list '" << dmlist_name << "'..." << endl;
 	vector<float> dm_list;
 	std::ifstream dm_file(dmlist_name.c_str());
 	if( !dm_file ) {
@@ -456,17 +482,19 @@ int main(int argc, char* argv[])
 	          std::istream_iterator<float>(),
 	          std::back_inserter(dm_list));
 
-  cerr << "Read " << dm_list.size() << " dms from list" << endl;
+  if (verbose)
+    cerr << "Read " << dm_list.size() << " dms from list" << endl;
 	
 	vector<float> dm_time_data(out_nsamps * out_dm_count, 0.f);
 	
-	cerr << "Computing DM-time plot..." << endl;
+  if (verbose)
+	  cerr << "Computing DM-time plot..." << endl;
 	int error = gen_dm_time_plot(input_name,
 	                             &dm_list[0], dm_list.size(),
 	                             samp, filter, dm_idx,
 	                             out_nsamps, out_dm_count,
 	                             &dm_time_data[0],
-	                             do_filter);
+	                             do_filter, verbose);
 	if( error ) {
 		cerr << "gen_dm_time_plot failed" << endl;
 		return -1;
@@ -475,14 +503,17 @@ int main(int argc, char* argv[])
 	size_t out_nchans = header.nchans / fscrunch;
 	vector<float> freq_time_data(out_nsamps * out_nchans, 0.f);
 	
-	cerr << "Computing freq-time plot..." << endl;
+  if (verbose)
+	  cerr << "Computing freq-time plot..." << endl;
 	size_t ft_plot_filter = filter > 2 ? filter - 2 : 0;
 	gen_freq_time_plot(input_name,
 	                   samp, ft_plot_filter, dm_list[dm_idx],
 	                   out_nsamps, fscrunch,
-	                   &freq_time_data[0]);
+	                   &freq_time_data[0],
+                     verbose);
 	
-	cerr << "Writing freq-time data to freq_time.dat..." << endl;
+  if (verbose)
+	  cerr << "Writing freq-time data to freq_time.dat..." << endl;
 	//size_t levels = 256;
 	std::ofstream freq_time_file("freq_time.dat");
 	for( size_t c=0; c<out_nchans; ++c ) {
@@ -500,14 +531,18 @@ int main(int argc, char* argv[])
         */
         //val = rawval >= 3. ? val : 0;
 			  //out_file << val << "\t";
-			  freq_time_file << rawval << "\t";
+        if (IsNan(rawval))
+			    rawval = 0;
+
+			  freq_time_file << rawval  << "\t";
       }
 		}
 		freq_time_file << "\n";
 	}
 	freq_time_file.close();
 	
-	cerr << "Computing result bounds..." << endl;
+  if (verbose)
+	  cerr << "Computing result bounds..." << endl;
 	float minval = std::accumulate(dm_time_data.begin(),
 	                               dm_time_data.end(),
 	                               dm_time_data[0],
@@ -518,19 +553,23 @@ int main(int argc, char* argv[])
 	                               max_t<float>());
 	size_t max_idx = std::max_element(dm_time_data.begin(),
 	                                  dm_time_data.end()) - dm_time_data.begin();
-	cerr << "Max value        = " << maxval << endl;
-	cerr << "Min value        = " << minval << endl;
-	cerr << "Max data index   = " << max_idx << endl;
-	cerr << "Max sample index = " << max_idx%out_nsamps << endl;
-	cerr << " Dist from given = " << abs(max_idx%out_nsamps - out_nsamps/2) << endl;
+  if (verbose)
+  {
+  	cerr << "Max value        = " << maxval << endl;
+	  cerr << "Min value        = " << minval << endl;
+  	cerr << "Max data index   = " << max_idx << endl;
+	  cerr << "Max sample index = " << max_idx%out_nsamps << endl;
+	  cerr << " Dist from given = " << abs(max_idx%out_nsamps - out_nsamps/2) << endl;
+  }
 	// TODO: Fix this for DM trial bounds
 	size_t dm_idx_start = dm_idx > out_dm_count/2 ? dm_idx - out_dm_count/2 : 0;
 	size_t max_dm_idx   = dm_idx_start + max_idx/out_nsamps;
-	cerr << "Max DM index     = " << max_dm_idx << endl;
-	cerr << " Dist from given = " << abs(max_dm_idx - dm_idx) << endl;
-	
-	
-	cerr << "Extracting SNR vs. DM..." << endl;
+  if (verbose)
+  {
+	  cerr << "Max DM index     = " << max_dm_idx << endl;
+	  cerr << " Dist from given = " << abs(max_dm_idx - dm_idx) << endl;
+	  cerr << "Extracting SNR vs. DM..." << endl;
+  }
 	std::ofstream snr_dm_file("snr_dm.dat");
 	snr_dm_file << "#dm_trial\tDM\tSNR" << endl;
 	for( size_t d=0; d<std::min(out_dm_count,dm_list.size()); ++d ) {
@@ -545,7 +584,8 @@ int main(int argc, char* argv[])
 	
 	float width = (1 << filter);
 	
-	cerr << "Extracting SNR vs. time..." << endl;
+  if (verbose)	
+	  cerr << "Extracting SNR vs. time..." << endl;
 	std::ofstream snr_time_file("snr_time.dat");
 	snr_time_file << "#sample\ttime\tSNR\tSNR@DM-1\tSNR@DM+1\tSNR@DM0" << endl;
 	for( size_t t=0; t<out_nsamps; ++t ) {
@@ -564,12 +604,18 @@ int main(int argc, char* argv[])
 	
 	size_t max_image_nsamps = 16384; // 4096
 	
-	if( out_nsamps > max_image_nsamps ) {
-		cerr << "Skipping image output for large data" << endl;
-		cerr << "Done." << endl;
+	if (out_nsamps > max_image_nsamps ) 
+  {
+    if (verbose)	
+    {
+		  cerr << "Skipping image output for large data" << endl;
+		  cerr << "Done." << endl;
+    }
 		return 0;
 	}
-	cerr << "Writing output to 'dm_time.pgm'..." << endl;
+
+  if (verbose)
+	  cerr << "Writing output to 'dm_time.pgm'..." << endl;
 	//size_t levels = 16384;
 	size_t levels = 256;
 	std::ofstream out_file("dm_time.pgm");
@@ -594,6 +640,7 @@ int main(int argc, char* argv[])
 		out_file << "\n";
 	}
 	out_file.close();
-	
-	cerr << "Done" << endl;
+
+  if (verbose) 
+	  cerr << "Done" << endl;
 }
