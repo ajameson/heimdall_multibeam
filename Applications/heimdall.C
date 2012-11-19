@@ -94,7 +94,8 @@ int main(int argc, char* argv[])
   params.df = data_source->get_df();
   params.dt = data_source->get_tsamp();
 
-  cout << "processing beam " << (params.beam+1)  << endl;
+  if ( params.verbosity > 0)
+    cout << "processing beam " << (params.beam+1)  << endl;
 
   float tsamp = data_source->get_tsamp() / 1000000;
   size_t stride = data_source->get_stride();

@@ -263,6 +263,16 @@ hd_error hd_execute(hd_pipeline pl,
   if( error != HD_NO_ERROR ) {
     return throw_error(error);
   }
+
+  error = apply_manual_killmasks (pl->dedispersion_plan,
+                                  &h_killmask[0], 
+                                  pl->params.num_channel_zaps,
+                                  pl->params.channel_zaps);
+  if( error != HD_NO_ERROR ) {
+    return throw_error(error);
+  }
+
+        
   
   hd_size good_chan_count = thrust::reduce(h_killmask.begin(),
                                            h_killmask.end());
@@ -636,7 +646,7 @@ hd_error hd_execute(hd_pipeline pl,
       // Bail if the candidate rate is too high
       hd_size total_giant_count = d_giant_peaks.size();
       hd_float data_length_mins = nsamps * pl->params.dt / 60.0;
-      if( total_giant_count / data_length_mins > pl->params.max_giant_rate ) {
+      if ( pl->params.max_giant_rate && ( total_giant_count / data_length_mins > pl->params.max_giant_rate ) ) {
         too_many_giants = true;
         float searched = ((float) dm_idx * 100) / (float) dm_count;
         cout << "WARNING: exceeded max giants/min, DM [" << dm_list[dm_idx] << "] space searched " << searched << "%" << endl;

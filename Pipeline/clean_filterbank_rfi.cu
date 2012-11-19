@@ -483,9 +483,23 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
   if( error != HD_NO_ERROR ) {
     return error;
   }
-  // AJ always kill channels 0 -> 153.6 TODO paramterise this!!!!
-  //for (unsigned i=0; i<150; i++)
-  //  h_killmask[i] = 0;
   
+  return HD_NO_ERROR;
+}
+
+hd_error apply_manual_killmasks (dedisp_plan    main_plan,
+                                 int*           h_killmask,
+                                 unsigned int num_channel_zaps,
+                                 hd_range_t * channel_zaps)
+{
+  hd_size nchans = dedisp_get_channel_count(main_plan);
+  for (unsigned i=0; i<num_channel_zaps; i++)
+  {
+    for (unsigned j=channel_zaps[i].start; j<channel_zaps[i].end; j++)
+    {
+      if (j < nchans)
+        h_killmask[j] = 0;
+    }
+  }
   return HD_NO_ERROR;
 }

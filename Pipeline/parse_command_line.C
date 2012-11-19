@@ -126,7 +126,12 @@ int hd_parse_command_line(int argc, char* argv[], hd_params* params)
       params->coincidencer_host = strdup(host.c_str());
       params->coincidencer_port = atoi(port.c_str());
     }
-    else if( argv[i] == string("-coincidener_port") ) {
+    else if( argv[i] == string("-zap_chans") ) {
+      unsigned int izap = params->num_channel_zaps;
+      params->num_channel_zaps++;
+      params->channel_zaps = (hd_range_t *) realloc (params->channel_zaps, sizeof(hd_range_t) * params->num_channel_zaps);
+      params->channel_zaps[izap].start = atoi(argv[++i]);
+      params->channel_zaps[izap].end   = atoi(argv[++i]);
     }
     else {
       cerr << "WARNING: Unknown parameter '" << argv[i] << "'" << endl;
@@ -161,6 +166,8 @@ void hd_print_usage()
   cout << "    -output_dir path         create all output files in specified path" << endl;
   cout << "    -dm min max              min and max DM" << endl;
   cout << "    -coincidencer host:port  connect to the coincidencer on the specified host and port" << endl;
+  cout << "    -zap_chans start end     zap all channels between start and end channels inclusive" << endl;
+  cout << "    -max_giant_rate nevents  limit the maximum number of individual detections per minute to nevents" << endl;
   cout << "    -dm_pulse_width num      TBA" << endl;
   cout << "    -dm_nbits num            TBA" << endl;
   cout << "    -scrunching num          TBA" << endl;
