@@ -219,6 +219,7 @@ hd_error label_candidate_clusters(hd_size            count,
 	              within_range(ci.begin,ci.end,cj.begin,cj.end,time_tol) ):
 	              ci.new_label = min(ci.new_label, cj.new_label);
 	 */
+
 	using thrust::make_counting_iterator;
 	
 	thrust::device_ptr<hd_size> d_labels_begin(d_labels);
@@ -357,7 +358,8 @@ hd_error label_candidate_clusters(hd_size            count,
 	// Note: This is a parallel version of this algorithm that may not be
 	//         as efficient as the sequential version but should win out
 	//         in overall speed.
-	
+
+
 	unsigned int* d_counter_address;
 	cudaGetSymbolAddress((void**)&d_counter_address, "d_counter");
 	thrust::device_ptr<unsigned int> d_counter_ptr(d_counter_address);

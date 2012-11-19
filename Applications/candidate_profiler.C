@@ -163,19 +163,30 @@ int gen_freq_time_plot(string filename,
 	size_t max_delay = dedisp_get_max_delay(plan);
 	dedisp_destroy_plan(plan);
 
-  cerr << "dedisp_get_max_delay=" << max_delay << endl;
-	
+  size_t delay = 2;
 	size_t tscrunch    = 1<<filter;
 	size_t in_nsamps   = out_nsamps * tscrunch;
+  if (in_nsamps < max_delay)
+  {
+    // find smallest power of 2 > max_delay
+    while (delay < max_delay)
+      delay *= 2;
+    in_nsamps = delay;
+    tscrunch = in_nsamps / out_nsamps;
+  }
 	size_t centre_samp = samp + max_delay/2;
 	size_t first_samp  = centre_samp - in_nsamps/2;
 
   if (verbose)
   {	
+    cerr << "max delay= " << max_delay<< endl;
+    cerr << "delay= " << delay<< endl;
+    cerr << "tscrunch = " << tscrunch << endl;
 	  cerr << "Input sample range: "
 	       << first_samp << " : " << first_samp+in_nsamps << " = " << in_nsamps << " samples" << endl;
     cerr << "DM = " << dm << endl;
   }
+  cout << "in_nsamps=" << in_nsamps << endl;
 	
 	size_t chans_per_word = sizeof(word_type)*8/header.nbits;
 	size_t mask         = ((unsigned)1<<header.nbits) - 1;//(((unsigned)1<<(header.nbits-1))-1)*2+1;
@@ -204,6 +215,8 @@ int gen_freq_time_plot(string filename,
 				}
 			}
 			//out[c/fscrunch + (t/tscrunch)*out_nchans] =
+
+      //cerr << "out[" << (c/fscrunch*out_nsamps + (t/tscrunch)) << "] = " << sum / (tscrunch*fscrunch) << endl;
 			out[c/fscrunch*out_nsamps + (t/tscrunch)] =
 				sum / (tscrunch*fscrunch);
 		}
@@ -304,7 +317,7 @@ int gen_dm_time_plot(string filename,
 		first_samp = samp > out_nsamps/2 + width/2 ? samp - out_nsamps/2 - width/2 : 0;
 	}
 	// TODO: Ensure sample index is within upper bound
-	
+
   if (verbose)
   {
     cerr << "Max dispersion delay = " << dedisp_get_max_delay(plan) << endl;

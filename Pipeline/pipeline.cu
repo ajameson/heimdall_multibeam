@@ -81,9 +81,9 @@ hd_error allocate_gpu(const hd_pipeline pl) {
   int proc_idx = pl->params.beam;
   int gpu_idx = pl->params.gpu_id;
   
-  
   cudaError_t cerror = cudaSetDevice(gpu_idx);
   if( cerror != cudaSuccess ) {
+    cerr << "Could not setCudaDevice to " << gpu_idx << ": " << cudaGetErrorString(cerror) <<  endl;
     return throw_cuda_error(cerror);
   }
   
