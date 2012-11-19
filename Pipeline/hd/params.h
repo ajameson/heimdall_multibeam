@@ -62,7 +62,11 @@ struct hd_params {
   // coincidencer socket mode
   const char * coincidencer_host;   // host for coincidence reporting
   int          coincidencer_port;   // port for coincidence reporting
-  
+ 
+  // channel zapping
+  unsigned int num_channel_zaps;
+  hd_range_t * channel_zaps;
+
   // TESTING
   //hd_size first_beam;
   hd_size beam_count;

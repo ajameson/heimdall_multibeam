@@ -41,3 +41,9 @@ struct Candidates : public RawCandidates {
 	hd_size*  beam_counts;
 	hd_size*  beam_masks;
 };
+
+typedef struct hd_range {
+  hd_size start;
+  hd_size end;
+} hd_range_t;
+

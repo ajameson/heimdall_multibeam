@@ -45,9 +45,12 @@ void hd_set_default_params(hd_params* params) {
 	//params->cand_min_members = 3;
   
   // TODO: This still needs tuning!
-  params->max_giant_rate  = 1000000.0; // Max allowed giants per minute
+  params->max_giant_rate  = 0;      // Max allowed giants per minute, 0 == no limit
 
   params->min_tscrunch_width = 4096; // Filter width at which to begin tscrunching
+
+  params->num_channel_zaps = 0;
+  params->channel_zaps = NULL;
 
   params->coincidencer_host = NULL;
   params->coincidencer_port = -1;
