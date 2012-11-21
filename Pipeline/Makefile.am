@@ -10,7 +10,7 @@ libhdpipeline_la_SOURCES = default_params.C error.C parse_command_line.C clean_f
 nobase_include_HEADERS = hd/median_filter.h hd/error.h hd/types.h
 
 # To find the dedisp lib from bbarsdell
-AM_CPPFLAGS = -DTHRUST_DEBUG -I../ -I../Network @DEDISP_CFLAGS@ @THRUST_CFLAGS@ @CUDA_CFLAGS@
+AM_CPPFLAGS = -I../ -I../Network @DEDISP_CFLAGS@ @THRUST_CFLAGS@ @CUDA_CFLAGS@
 
 if HAVE_PSRDADA
 AM_CPPFLAGS += @PSRDADA_CFLAGS@

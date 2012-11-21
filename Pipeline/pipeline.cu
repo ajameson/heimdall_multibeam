@@ -264,6 +264,10 @@ hd_error hd_execute(hd_pipeline pl,
     return throw_error(error);
   }
 
+  if( pl->params.verbosity >= 2 ) {
+    cout << "Applying manual killmasks = " << endl;
+  }
+
   error = apply_manual_killmasks (pl->dedispersion_plan,
                                   &h_killmask[0], 
                                   pl->params.num_channel_zaps,
@@ -272,8 +276,6 @@ hd_error hd_execute(hd_pipeline pl,
     return throw_error(error);
   }
 
-        
-  
   hd_size good_chan_count = thrust::reduce(h_killmask.begin(),
                                            h_killmask.end());
   hd_size bad_chan_count = pl->params.nchans - good_chan_count;

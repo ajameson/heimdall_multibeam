@@ -91,9 +91,11 @@ bool PSRDadaRingBuffer::read_header()
     return false;
   }
 
-  //cerr << "==================================================" << endl;
-  //cerr << header << endl;
-  //cerr << "==================================================" << endl;
+#ifdef DEBUG
+  cerr << "==================================================" << endl;
+  cerr << header << endl;
+  cerr << "==================================================" << endl;
+#endif
 
   // get the required header params
   if (ascii_header_get (header, "NCHAN", "%d", &nchan) < 0)
@@ -105,15 +107,21 @@ bool PSRDadaRingBuffer::read_header()
 	float bandwidth = 0;
   if (ascii_header_get (header, "BANDWIDTH", "%f", &bandwidth) < 0)
   {
-    cerr << "PSRDadaRingBuffer::read_header could not extract BANDWIDTH from header" << endl;
-    dada_error = true;
+    if (ascii_header_get (header, "BW", "%f", &bandwidth) < 0)
+    {
+      cerr << "WARNING: PSRDadaRingBuffer::read_header could not extract BANDWIDTH from header" << endl;
+      dada_error = true;
+    }
   }
 
 	float cfreq = 0;
   if (ascii_header_get (header, "CFREQ", "%f", &cfreq) < 0)
   {
-    cerr << "PSRDadaRingBuffer::read_header could not extract CFREQ from header" << endl;
-    dada_error = true;
+    if (ascii_header_get (header, "FREQ", "%f", &cfreq) < 0)
+    {
+      cerr << "WARNING: PSRDadaRingBuffer::read_header could not extract CFREQ from header" << endl;
+      dada_error = true;
+    }
   }
 
 	if (!dada_error)
@@ -164,7 +172,11 @@ bool PSRDadaRingBuffer::read_header()
 	stride = nchan * (nbit / 8);
   spectra_rate = 1000000 / (double) tsamp;
 
+  // convert tsamp from usecs (DADA DEFAULT) to seconds
+  tsamp /= 1000000;
+
 #ifdef _DEBUG
+  cerr << "PSRDadaRingBuffer::read_header utc_start_str=" << utc_start_str << endl;
   cerr << "PSRDadaRingBuffer::read_header utc_start=" << utc_start << endl;
   cerr << "PSRDadaRingBuffer::read_header tsamp=" << tsamp << endl;
   cerr << "PSRDadaRingBuffer::read_header spectra_rate =" << spectra_rate << endl;
