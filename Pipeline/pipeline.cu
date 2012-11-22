@@ -81,9 +81,9 @@ hd_error allocate_gpu(const hd_pipeline pl) {
   int proc_idx = pl->params.beam;
   int gpu_idx = pl->params.gpu_id;
   
-  
   cudaError_t cerror = cudaSetDevice(gpu_idx);
   if( cerror != cudaSuccess ) {
+    cerr << "Could not setCudaDevice to " << gpu_idx << ": " << cudaGetErrorString(cerror) <<  endl;
     return throw_cuda_error(cerror);
   }
   
@@ -264,6 +264,10 @@ hd_error hd_execute(hd_pipeline pl,
     return throw_error(error);
   }
 
+  if( pl->params.verbosity >= 2 ) {
+    cout << "Applying manual killmasks = " << endl;
+  }
+
   error = apply_manual_killmasks (pl->dedispersion_plan,
                                   &h_killmask[0], 
                                   pl->params.num_channel_zaps,
@@ -272,8 +276,6 @@ hd_error hd_execute(hd_pipeline pl,
     return throw_error(error);
   }
 
-        
-  
   hd_size good_chan_count = thrust::reduce(h_killmask.begin(),
                                            h_killmask.end());
   hd_size bad_chan_count = pl->params.nchans - good_chan_count;

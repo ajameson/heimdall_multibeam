@@ -7,14 +7,21 @@
 
 #pragma once
 
+#include <config.h>
+
+#ifdef HAVE_PSRDADA
 #include "dada_hdu.h"
+#endif
 #include "hd/types.h"
+#include <time.h>
 
 // TODO: Consider grouping these into sub structs
 struct hd_params {
   // Application parameters
   int      verbosity;
+#ifdef HAVE_PSRDADA
   key_t    dada_id;        // Identifier for the psrdada shared memory buffer
+#endif
   const char * sigproc_file;  // Name of sigproc filterbank file
   bool     yield_cpu;      // Yield/spin the CPU to in/decrease GPU latency
   hd_size  nsamps_gulp;    // No. samples to gulp into memory and process at once

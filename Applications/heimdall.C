@@ -21,8 +21,10 @@ using std::endl;
 
 // input formats supported
 #include "hd/DataSource.h"
-#include "hd/PSRDadaRingBuffer.h"
 #include "hd/SigprocFile.h"
+#ifdef HAVE_PSRDADA
+#include "hd/PSRDadaRingBuffer.h"
+#endif
 
 #include "hd/stopwatch.h"
 
@@ -37,7 +39,8 @@ int main(int argc, char* argv[])
     return 1;
   
   DataSource* data_source = 0;
-  
+
+#ifdef HAVE_PSRDADA
   if( params.dada_id != 0 ) {
 
     if (params.verbosity)
@@ -76,13 +79,16 @@ int main(int argc, char* argv[])
   }
   else 
   {
+#endif
     // Read from filterbank file
     data_source = new SigprocFile(params.sigproc_file);
     if( !data_source || data_source->get_error() ) {
       cerr << "ERROR: Failed to open data file" << endl;
       return -1;
     }
+#ifdef HAVE_PSRDADA
   }
+#endif
 
   if (!params.override_beam)
     if (data_source->get_beam() > 0)
