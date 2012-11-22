@@ -308,16 +308,20 @@ class TextOutput(object):
     def __init__(self):
         self.dm_base = 1.0
         self.snr_min = 6.0
-    def print_text(self, data):
+    def print_text(self, data, max_cands):
         sys.stdout.write("SNR\tTime\tDM\n")
         for (i, item) in enumerate(data['valid']['snr']):
             sys.stdout.write (str(data['valid']['snr'][i]) + "\t" + str(data['valid']['time'][i]) + "\t" + str(data['valid']['dm'][i]) + "\n")
-    def print_xml(self, data):
+    def print_xml(self, data, max_cands):
         # get indicie list for sorting via snr
         snr_sorted_indices = [i[0] for i in sorted(enumerate(data['valid']['snr']), key=lambda x:x[1],reverse=True)]
 
-        #for (i, item) in enumerate(data['valid']['snr']):
+        cand_i = 0
         for i in snr_sorted_indices:
+            if cand_i >= max_cands:
+                return
+            else:
+                cand_i += 1
             sys.stdout.write ("<candidate snr='" + str(data['valid']['snr'][i]) + \
                                        "' time='" + str(data['valid']['time'][i]) + \
                                        "' dm='" + str(data['valid']['dm'][i]) + \
@@ -347,6 +351,7 @@ if __name__ == "__main__":
     parser.add_argument('-std_out', action="store_true")
     parser.add_argument('-just_time_dm', action="store_true")
     parser.add_argument('-cand_list_xml', action="store_true")
+    parser.add_argument('-max_cands', type=int, default=20)
     parser.add_argument('-no_plot', action="store_true")
     parser.add_argument('-interactive', action="store_true")
     parser.add_argument('-verbose', action="store_true")
@@ -359,6 +364,7 @@ if __name__ == "__main__":
     just_time_dm = args.just_time_dm
     verbose = args.verbose
     cand_list_xml = args.cand_list_xml
+    max_cands = args.max_cands
     no_plot = args.no_plot
     resolution = args.resolution
     res_parts = resolution.split("x")
@@ -433,7 +439,7 @@ if __name__ == "__main__":
       if verbose:
         sys.stderr.write ( "Generating text only listing on stdout:\n")
       text_output = TextOutput()
-      text_output.print_xml(categories)
+      text_output.print_xml(categories, max_cands)
 
     if not no_plot:    
       # Generate plots

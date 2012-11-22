@@ -15,6 +15,7 @@ Formats/Makefile
 Network/Makefile
 Pipeline/Makefile
 Scripts/Makefile
+Scripts/trans_paths.py
 config.guess
 config.status
 config.sub

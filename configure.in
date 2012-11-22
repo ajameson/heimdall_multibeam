@@ -73,6 +73,14 @@ AC_FUNC_VPRINTF
 AC_FUNC_ERROR_AT_LINE
 AC_CHECK_FUNCS([gettimeofday memset pow socket sqrt strdup strerror])
 
+
+if test "x$prefix" = xNONE; then
+  prefix=$ac_default_prefix
+fi
+
+HEIMDALL_INSTALL=$prefix
+AC_SUBST(HEIMDALL_INSTALL)
+
 AM_CONFIG_HEADER([config.h])
 
 AC_CONFIG_FILES([Applications/Makefile
@@ -81,5 +89,6 @@ AC_CONFIG_FILES([Applications/Makefile
                  Network/Makefile
                  Pipeline/Makefile
                  Share/Makefile
-                 Scripts/Makefile])
+                 Scripts/Makefile
+                 Scripts/trans_paths.py])
 AC_OUTPUT

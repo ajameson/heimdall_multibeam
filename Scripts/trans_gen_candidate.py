@@ -2,6 +2,7 @@
 
 import sys, os, tempfile, time
 import numpy as np
+import trans_paths
 
 DM_MAX = 2000
 # TODO check what these mean
@@ -50,29 +51,37 @@ class SNRTimePlot(object):
         self.g('set size sx, sy')
 
         self.g('set autoscale x')
-        self.g('set yrange [-3:10]')
+        #self.g('set yrange [-3:10]')
         self.g('set xlabel "Time [s]"')
-        self.g('set ylabel ""')
+        self.g('set ylabel "SNR"')
         self.g('unset key')
         self.g('set ytics 2 format ""')
         self.g('set grid noxtics nomxtics ytics mytics lt 9 lw 0.2')
 
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 0*sy')
+        self.g('set ylabel "DM ?"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:6 w l lt 1')
         self.g('set xlabel ""')
         self.g('set xtics format ""')
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 1*sy')
+        self.g('set ylabel "DM-1"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:4 w l lt 1')
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 2*sy')
+        self.g('set ylabel "SNR"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:3 w l lt 1')
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 3*sy')
+        self.g('set ylabel "DM+1"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:5 w l lt 1')
        
 
 class FreqTimePlot(object):
-    def __init__(self, g, dm):
+    def __init__(self, g, dm, in_nsamps, tsamp, f0, f1):
         self.g = g
         self.dm = dm
+        self.in_nsamps = in_nsamps
+        self.tsamp = tsamp
+        self.f0 = f0
+        self.f1 = f1
     def plot(self, data):
         self.g.reset()
         self.g('PX = 1')
@@ -90,22 +99,28 @@ class FreqTimePlot(object):
         self.g('set xlabel "Time"')
         self.g('set ylabel "Frequency"')
 
-        # TODO: Work these out
-        self.g('t0 = -0.40')
-        self.g('t1 = t0 + 1.048576')
-        self.g('f0 = 1582.')
-        self.g('f1 = 1182.')
-        self.g('dm = '+str(dm))
+        if self.in_nsamps > 0:
+          in_nsamps = self.in_nsamps
+        else:
+          in_nsamps = 4096
 
+        in_ntime = tsamp * in_nsamps
+        t0 = 0 - (in_ntime / 2.0)
+        t1 = 0 + (in_ntime / 2.0)
+        self.g('t0 = ' + str(t0) + "\n")
+        self.g('t1 = ' + str(t1) + "\n")
+
+        self.g('f0 = ' + str(f0))
+        self.g('f1 = ' + str(f1))
+        self.g('dm = ' + str(dm))
         self.g('k = 4.148808e3')
-
         self.g('g(x) = sqrt(1. / (x / (dm*k) + 1./f0**2))')
 
         self.g('set x2range [t0:t1]')
         self.g('set y2range [f0:f1]')
 
         # TODO: Work out equation for DM curve in pixel coords
-        self.g('plot "' + data + '" matrix with image notitle, g(x) w l notitle lc 2 axes x2y2')
+        self.g('plot "' + data + '" matrix with image notitle, g(x) w l notitle lw 2 lc 2 axes x2y2')
 
 
 if __name__ == "__main__":
@@ -117,6 +132,9 @@ if __name__ == "__main__":
     parser.add_argument('sample', type=int, help='Sample number event was detected')
     parser.add_argument('filter', type=int, help='Filter number in which event was found')
     parser.add_argument('dm', type=float, help='DM of candidate event')
+    parser.add_argument('-tsamp', type=float,  default=0.000064, help='Sampling time')
+    parser.add_argument('-f0', type=float,  default=1581.0, help='Highest freq channel')
+    parser.add_argument('-f1', type=float,  default=1181.0, help='Lowest freq channel')
     parser.add_argument('-resolution', default="1024x768")
     parser.add_argument('-std_out', help='Output image to stdout', action="store_true")
     parser.add_argument('-no_plot', help='Do not produce image, just process data', action="store_true")
@@ -129,6 +147,9 @@ if __name__ == "__main__":
     sample = args.sample
     filter = args.filter
     dm = args.dm
+    tsamp = args.tsamp
+    f0 = args.f0
+    f1 = args.f1
     std_out = args.std_out
     no_plot = args.no_plot
     resolution = args.resolution
@@ -145,7 +166,7 @@ if __name__ == "__main__":
     workdir = tempfile.mkdtemp()
 
     # check the DM2000 file exists
-    dmlist = '/home/dada/linux_64/share/dm2000.list'
+    dmlist = trans_paths.getConfigDir() + '/dm2000.list'
 
     try:
       fptr = open(dmlist, 'r')
@@ -166,11 +187,11 @@ if __name__ == "__main__":
       if verbose:
         sys.stderr.write("DM index: " + str(dm_idx) + " from DM=" + str(dm) + "\n")
     
-    out_nsamp = 32
+    out_nsamp = 64
     out_dmcount = 32
     fscrunch = 16
 
-    cmd = "cd "+workdir+"; /home/dada/heimdall/Applications/candidate_profiler " + \
+    cmd = "cd "+workdir+"; " + trans_paths.getBinaryDir() + "/candidate_profiler " + \
           fil_file + " " + \
           dmlist + " " + \
           str(sample) + " " + \
@@ -181,7 +202,17 @@ if __name__ == "__main__":
           str(fscrunch)
     if verbose:
       sys.stderr.write ( "Running candidate profiler: " + cmd + "\n")
-    os.system(cmd)
+
+    in_nsamps = 0
+    sys.stderr.write ( cmd + "\n")
+    p = os.popen(cmd)
+    for line in p.readlines():
+      line = line.strip()
+      sys.stderr.write(line + "\n")
+      parts = line.split("=")
+      if (parts[0] == "in_nsamps"):
+        in_nsamps = int(parts[1])
+    p.close()
 
     # time.sleep(1)
 
@@ -206,7 +237,7 @@ if __name__ == "__main__":
       g('set multiplot')
       g('set bmargin 0; set tmargin 0; set lmargin 0; set rmargin 0')
       g('TM = 0.06')
-      g('BM = 0.14')
+      g('BM = 0.06')
       g('LM = 0.06')
       g('RM = 0.06')
       g('NX = 2')
@@ -216,18 +247,18 @@ if __name__ == "__main__":
 
       snrdm_plot = SNRDMPlot(g)
       snrtime_plot = SNRTimePlot(g)
-      freqtime_plot = FreqTimePlot(g, dm)
+      freqtime_plot = FreqTimePlot(g, dm, in_nsamps, tsamp, f0, f1)
 
       snrdm_plot.plot(workdir + "/snr_dm.dat")
       snrtime_plot.plot(workdir + "/snr_time.dat")
       freqtime_plot.plot(workdir + "/freq_time.dat")
       
       g('unset multiplot')
-      g.close()
 
     if interactive:
       raw_input('Please press return to close...\n')
 
+    g.close()
     time.sleep(0.1)
 
     if verbose:
