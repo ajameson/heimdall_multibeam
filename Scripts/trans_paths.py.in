@@ -4,6 +4,9 @@
 # Heimdall python module for path inforamtion
 #
 
+def getControlDir():
+  return "@HEIMDALL_INSTALL@/control"
+
 def getConfigDir():
   return "@HEIMDALL_INSTALL@/share"
 
