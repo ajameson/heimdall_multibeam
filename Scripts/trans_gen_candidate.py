@@ -51,7 +51,6 @@ class SNRTimePlot(object):
         self.g('set size sx, sy')
 
         self.g('set autoscale x')
-        #self.g('set yrange [-3:10]')
         self.g('set xlabel "Time [s]"')
         self.g('set ylabel "SNR"')
         self.g('unset key')
@@ -59,20 +58,23 @@ class SNRTimePlot(object):
         self.g('set grid noxtics nomxtics ytics mytics lt 9 lw 0.2')
 
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 0*sy')
-        self.g('set ylabel "DM ?"')
+        self.g('set ylabel "DM 0"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:6 w l lt 1')
+
         self.g('set xlabel ""')
         self.g('set xtics format ""')
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 1*sy')
         self.g('set ylabel "DM-1"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:4 w l lt 1')
+
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 2*sy')
         self.g('set ylabel "SNR"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:3 w l lt 1')
+
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 3*sy')
         self.g('set ylabel "DM+1"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:5 w l lt 1')
-       
+
 
 class FreqTimePlot(object):
     def __init__(self, g, dm, in_nsamps, tsamp, f0, f1):
@@ -107,9 +109,8 @@ class FreqTimePlot(object):
         in_ntime = tsamp * in_nsamps
         t0 = 0 - (in_ntime / 2.0)
         t1 = 0 + (in_ntime / 2.0)
-        self.g('t0 = ' + str(t0) + "\n")
-        self.g('t1 = ' + str(t1) + "\n")
-
+        self.g('t0 = ' + str(t0))
+        self.g('t1 = ' + str(t1))
         self.g('f0 = ' + str(f0))
         self.g('f1 = ' + str(f1))
         self.g('dm = ' + str(dm))
@@ -187,7 +188,7 @@ if __name__ == "__main__":
       if verbose:
         sys.stderr.write("DM index: " + str(dm_idx) + " from DM=" + str(dm) + "\n")
     
-    out_nsamp = 64
+    out_nsamp = 128
     out_dmcount = 32
     fscrunch = 16
 
