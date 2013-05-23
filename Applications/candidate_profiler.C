@@ -303,11 +303,16 @@ int gen_dm_time_plot(string filename,
 	}
 	cerr << endl;
 	*/
+
 	size_t width       = 1 << filter;
 	size_t nchan_bytes = header.nchans * header.nbits / (8*sizeof(dedisp_byte));
 	size_t nsamps;    // nsamps dedispersed
 	size_t in_nsamps; // nsamps for dedispersion
 	size_t first_samp;
+
+  size_t max_delay = dedisp_get_max_delay(plan);
+  size_t delay = 2;
+
 	if( !do_filter ) {
 		nsamps     = out_nsamps * width;
 		in_nsamps  = out_nsamps * width + dedisp_get_max_delay(plan);
@@ -318,8 +323,8 @@ int gen_dm_time_plot(string filename,
 		in_nsamps  = out_nsamps + width-1 + dedisp_get_max_delay(plan);
 		first_samp = samp > out_nsamps/2 + width/2 ? samp - out_nsamps/2 - width/2 : 0;
 	}
-	// TODO: Ensure sample index is within upper bound
 
+	// TODO: Ensure sample index is within upper bound
   if (verbose)
   {
     cerr << "Max dispersion delay = " << dedisp_get_max_delay(plan) << endl;
@@ -338,7 +343,7 @@ int gen_dm_time_plot(string filename,
 	
 	size_t out_nbits = sizeof(out_type) * 8;
 	vector<out_type> dedisped(nsamps * out_dm_count);
-	
+
 	// Dedisperse
 	error = dedisp_execute(plan, in_nsamps,
 	                       (dedisp_byte*)&in[0], header.nbits,
@@ -514,7 +519,20 @@ int main(int argc, char* argv[])
 		cerr << "gen_dm_time_plot failed" << endl;
 		return -1;
 	}
-	
+
+  // now generate a 0-dm list
+	vector<float> dm0_time_data(out_nsamps, 0.f);
+  error = gen_dm_time_plot(input_name,
+                           &dm_list[0], dm_list.size(),
+                           samp, filter, 0,
+                           out_nsamps, 1,
+                           &dm0_time_data[0],
+                           do_filter, verbose);
+  if( error ) {
+    cerr << "gen_dm0_time_plot failed" << endl;
+    return -1;
+  }
+
 	size_t out_nchans = header.nchans / fscrunch;
 	vector<float> freq_time_data(out_nsamps * out_nchans, 0.f);
 	
@@ -548,6 +566,10 @@ int main(int argc, char* argv[])
 			  //out_file << val << "\t";
         if (IsNan(rawval))
 			    rawval = 0;
+
+        // since channels < 150 are always bad for HTRU data
+        if ((c * fscrunch) < 150)
+          rawval = 0;
 
 			  freq_time_file << rawval  << "\t";
       }
@@ -613,7 +635,7 @@ int main(int argc, char* argv[])
 		              << dm_time_data[d*out_nsamps + t] << "\t"
 		              << dm_time_data[(d-1)*out_nsamps + t] << "\t"
 		              << dm_time_data[(d+1)*out_nsamps + t] << "\t"
-		              << dm_time_data[0*out_nsamps + t] << endl;
+		              << dm0_time_data[t] << endl;
 	}
 	snr_time_file.close();
 	
