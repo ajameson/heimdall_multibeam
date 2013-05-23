@@ -7,10 +7,10 @@
 
 LISTEN_HOST = "hipsr7.hipsr.local"
 LISTEN_PORT = 55555
-FILTERBANK_DIR = "/lfs/raid0/bpsr/perm"
+FILTERBANK_DIR = "/nfs/raid0/bpsr/perm"
 
 import Dada, Bpsr, threading, sys, time, socket, select, signal, traceback
-import time, numpy, math, os, fnmatch, tempfile, Gnuplot
+import time, numpy, math, os, fnmatch, tempfile, Gnuplot, datetime
 import trans_paths
 
 DM_LIST  = trans_paths.getConfigDir() + '/dm2000.list'
@@ -61,10 +61,34 @@ class SNRTimePlot(object):
         self.g('set bmargin dy; set tmargin dy; set lmargin dx; set rmargin dx')
         self.g('set size sx, sy')
 
+        # determine min / max values for each column in file data
+        snr_data = numpy.loadtxt(data,
+                   dtype={'names': ('samp_idx','time','snr',
+                                    'snr_dm-1','snr_dm+1','snr_dm0'),
+                          'formats': ('i4', 'f4', 'f4', 'f4', 'f4', 'f4')})
+        ymax = 0
+        ymin = 0
+        for row in snr_data:
+          if (row[2] > ymax):
+            ymax = row[2]
+          if (row[2] < ymin):
+            ymin = row[2]
+          if (row[3] > ymax):
+            ymax = row[3]
+          if (row[3] < ymin):
+            ymin = row[3]
+          if (row[4] > ymax):
+            ymax = row[4]
+          if (row[4] < ymin):
+            ymin = row[4]
+          if (row[5] > ymax):
+            ymax = row[5]
+          if (row[5] < ymin):
+            ymin = row[5]
+        
         self.g('set autoscale x')
-        #self.g('set autoscale y')
+        self.g('set yrange ['+str(ymin)+':'+str(ymax)+']')
         self.g('set xlabel "Time [s]"')
-        self.g('set ylabel "SNR"')
         self.g('unset key')
         self.g('set ytics 2 format ""')
         self.g('set grid noxtics nomxtics ytics mytics lt 9 lw 0.2')
@@ -72,14 +96,17 @@ class SNRTimePlot(object):
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 0*sy')
         self.g('set ylabel "DM 0"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:6 w l lt 1')
+
         self.g('set xlabel ""')
         self.g('set xtics format ""')
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 1*sy')
         self.g('set ylabel "DM-1"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:4 w l lt 1')
+
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 2*sy')
         self.g('set ylabel "SNR"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:3 w l lt 1')
+
         self.g('set origin PX*(SX+LM+RM) + LM, PY*(SY+TM+BM) + BM + 3*sy')
         self.g('set ylabel "DM+1"')
         self.g('plot 0 w l lt 9, "' + data +'" u 2:5 w l lt 1')
@@ -122,7 +149,7 @@ class FreqTimePlot(object):
         self.g('f1 = 1181.')
         self.g('dm = '+str(dm))
         self.g('k = 4.148808e3')
-        self.g('g(x) = sqrt(1. / (x / (dm*k) + 1./f0**2))')
+        self.g('g(x) = sqrt(1. / ((x-'+str(in_ntime/8.0)+') / (dm*k) + 1./f0**2))')
 
         self.g('set x2range [t0:t1]')
         self.g('set y2range [f0:f1]')
@@ -243,6 +270,13 @@ def plotCandidate(fil_file, sample, filter, dm):
 
   return content 
 
+
+def convertTime (dada_time):
+  time = datetime.datetime.strptime(dada_time, "%Y-%m-%d-%H:%M:%S")
+  ddd_time = time.strftime("%Y-%j-%H:%M:%S")
+  return ddd_time
+
+
 ############################################################################### 
 #
 # main
@@ -319,6 +353,7 @@ try:
                 del can_read[i]
 
           else:
+            proc_type = "cand"
             Dada.logMsg(1, DL, "<- " + message)
             parts = message.split()
             for part in parts:
@@ -335,9 +370,11 @@ try:
                 filter = int(val)
               elif key == "dm":
                 dm = float(val)
+              elif key == "proc_type":
+                proc_type = val
               else:
                 Dada.logMsg(1, DL, "main: unrecognized key/val pair: " + part)
-            
+
             # find the .fil file
             cmd = "ls -1 " + FILTERBANK_DIR + "/*/" + utc_start + "/" + beam + "/" + utc_start + ".fil "
             Dada.logMsg(3, DL, "main: " + cmd)
@@ -346,23 +383,89 @@ try:
             fil_file = p.readline().strip()
             p.close()
 
-            try:
-              fptr = open(fil_file, 'r')
-            except IOError:
-              Dada.logMsg(1, DL, "main: could not open filterbank file for reading")
-              fil_file = ""
-            else:
-              fptr.close()
+            Dada.logMsg(1, DL, "main: proc_type="+proc_type)
+            
+            if (proc_type == "dspsr"):
 
-            if len(fil_file) == 0:
-              Dada.logMsg(1, DL, "main: could not find filterbank file")
-            else:
+              ddd_time = convertTime(utc_start)
+              Dada.logMsg(1, DL, "main: ddd_time=" + ddd_time)
+
+              # cmd = "getMJD " + ddd_time + " |& tail -n 1"
+              # p = os.popen(cmd)
+              # utc_start_mjd = p.readline().strip()
+              # p.close()
+              # Dada.logMsg(1, DL, "main: utc_start_mjd=" + utc_start_mjd )
+
+              cand_time = (0.000064 * sample)
+              cmd = "dmsmear -f 1382 -b 400 -n 1024 -d " + str(dm) + " -q 2>&1 "
+              p = os.popen(cmd) 
+              cand_band_smear = p.readline().strip()
+              p.close()
+              Dada.logMsg(1, DL, "main: cand_band_smear='" + cand_band_smear + "'")
+
+              cand_filter_time = (2 ** filter) * 0.000064
+
+              cand_smearing = float(cand_band_smear) + float(cand_filter_time)
+
+              cand_start_time = cand_time - (1 * cand_smearing)
+
+              cand_tot_time   = 2 * cand_smearing
+
+              cmd = "dspsr " + fil_file + " -S " + str(cand_start_time) + \
+                    " -b 64 " + \
+                    " -T " + str(cand_tot_time) + \
+                    " -c " + str(cand_tot_time) + \
+                    " -D " + str(dm) + \
+                    " -U 1" + \
+                    " 2>&1 | grep unloading | awk '{print $NF}'"
+              # " -cepoch start" + \
+              Dada.logMsg(1, DL, "main: " + cmd)
+              p = os.popen(cmd) 
+              response = p.readline().strip()
+              p.close()
+
+              archive = response + ".ar"
+              count = 5
+              while ((not os.path.exists(archive)) and count > 0):
+                time.sleep(1)
+                count = count - 1 
+
               binary_data = []
-              Dada.logMsg(2, DL, "main: plotCandidate()")
-              binary_data = plotCandidate(fil_file, sample, filter, dm)
+              cmd = "psrplot -j 'F 32' -p freq+ ./" + archive + " -D -/PNG";
+              Dada.logMsg(1, DL, "main: " + cmd)
+              p = os.popen(cmd)
+              binary_data = p.read()
+              p.close()
+
               binary_len = len(binary_data)
-              Dada.logMsg(3, DL, "main: sending binary data len="+str(binary_len))
+              Dada.logMsg(1, DL, "main: sending binary data len="+str(binary_len))
               handle.send(binary_data)
+
+              cmd = "rm -f " + archive
+              Dada.logMsg(1, DL, "main: " + cmd)
+              p = os.popen(cmd)
+              binary_data = p.read()
+              p.close()
+
+            else:
+
+              try:
+                fptr = open(fil_file, 'r')
+              except IOError:
+                Dada.logMsg(1, DL, "main: could not open filterbank file for reading")
+                fil_file = ""
+              else:
+                fptr.close()
+
+              if len(fil_file) == 0:
+                Dada.logMsg(1, DL, "main: could not find filterbank file")
+              else:
+                binary_data = []
+                Dada.logMsg(2, DL, "main: plotCandidate()")
+                binary_data = plotCandidate(fil_file, sample, filter, dm)
+                binary_len = len(binary_data)
+                Dada.logMsg(3, DL, "main: sending binary data len="+str(binary_len))
+                handle.send(binary_data)
 
             Dada.logMsg(2, DL, "main: closing handle")
             handle.close()
