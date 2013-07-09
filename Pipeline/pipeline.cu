@@ -265,7 +265,7 @@ hd_error hd_execute(hd_pipeline pl,
   }
 
   if( pl->params.verbosity >= 2 ) {
-    cout << "Applying manual killmasks = " << endl;
+    cout << "Applying manual killmasks" << endl;
   }
 
   error = apply_manual_killmasks (pl->dedispersion_plan,
@@ -327,7 +327,14 @@ hd_error hd_execute(hd_pipeline pl,
   
   const dedisp_size* scrunch_factors =
     dedisp_get_dt_factors(pl->dedispersion_plan);
-  
+  if (pl->params.verbosity >= 3 ) 
+  {
+    cout << "DM List for " << pl->params.dm_min << " to " << pl->params.dm_max << endl;
+    for( hd_size i=0; i<dm_count; ++i ) {
+      cout << dm_list[i] << endl;
+    }
+  }  
+
   if( pl->params.verbosity >= 2 ) {
     cout << "Scrunch factors:" << endl;
     for( hd_size i=0; i<dm_count; ++i ) {
@@ -657,90 +664,101 @@ hd_error hd_execute(hd_pipeline pl,
       
     } // End of filter width loop
   } // End of DM loop
-  
-  start_timer(candidates_timer);
-  
+
   hd_size giant_count = d_giant_peaks.size();
-  thrust::device_vector<hd_size> d_giant_labels(giant_count);
-  hd_size* d_giant_labels_ptr = thrust::raw_pointer_cast(&d_giant_labels[0]);
-  
-  RawCandidates d_giants;
-  d_giants.peaks = thrust::raw_pointer_cast(&d_giant_peaks[0]);
-  d_giants.inds = thrust::raw_pointer_cast(&d_giant_inds[0]);
-  d_giants.begins = thrust::raw_pointer_cast(&d_giant_begins[0]);
-  d_giants.ends = thrust::raw_pointer_cast(&d_giant_ends[0]);
-  d_giants.filter_inds = thrust::raw_pointer_cast(&d_giant_filter_inds[0]);
-  d_giants.dm_inds = thrust::raw_pointer_cast(&d_giant_dm_inds[0]);
-  d_giants.members = thrust::raw_pointer_cast(&d_giant_members[0]);
-  
-  hd_size filter_count = get_filter_index(pl->params.boxcar_max) + 1;
-  if (( too_many_giants ) && ( pl->params.verbosity >= 1 )) {
-    cout << "WARNING: Max giants/minute exceeded! Processing incomplete!" << endl;
-  }
   if( pl->params.verbosity >= 2 ) {
     cout << "Giant count = " << giant_count << endl;
   }
   
-  if( pl->params.verbosity >= 2 ) {
-    cout << "Grouping coincident candidates..." << endl;
+  start_timer(candidates_timer);
+
+  thrust::host_vector<hd_float> h_group_peaks;
+  thrust::host_vector<hd_size>  h_group_inds;
+  thrust::host_vector<hd_size>  h_group_begins;
+  thrust::host_vector<hd_size>  h_group_ends;
+  thrust::host_vector<hd_size>  h_group_filter_inds;
+  thrust::host_vector<hd_size>  h_group_dm_inds;
+  thrust::host_vector<hd_size>  h_group_members;
+  thrust::host_vector<hd_float> h_group_dms;
+
+  if (!too_many_giants)
+  {
+    thrust::device_vector<hd_size> d_giant_labels(giant_count);
+    hd_size* d_giant_labels_ptr = thrust::raw_pointer_cast(&d_giant_labels[0]);
+  
+    RawCandidates d_giants;
+    d_giants.peaks = thrust::raw_pointer_cast(&d_giant_peaks[0]);
+    d_giants.inds = thrust::raw_pointer_cast(&d_giant_inds[0]);
+    d_giants.begins = thrust::raw_pointer_cast(&d_giant_begins[0]);
+    d_giants.ends = thrust::raw_pointer_cast(&d_giant_ends[0]);
+    d_giants.filter_inds = thrust::raw_pointer_cast(&d_giant_filter_inds[0]);
+    d_giants.dm_inds = thrust::raw_pointer_cast(&d_giant_dm_inds[0]);
+    d_giants.members = thrust::raw_pointer_cast(&d_giant_members[0]);
+  
+    hd_size filter_count = get_filter_index(pl->params.boxcar_max) + 1;
+
+    if( pl->params.verbosity >= 2 ) {
+      cout << "Grouping coincident candidates..." << endl;
+    }
+  
+    hd_size label_count;
+    error = label_candidate_clusters(giant_count,
+                                     *(ConstRawCandidates*)&d_giants,
+                                     pl->params.cand_sep_time,
+                                     pl->params.cand_sep_filter,
+                                     pl->params.cand_sep_dm,
+                                     d_giant_labels_ptr,
+                                     &label_count);
+    if( error != HD_NO_ERROR ) {
+      return throw_error(error);
+    }
+  
+    hd_size group_count = label_count;
+    if( pl->params.verbosity >= 2 ) {
+      cout << "Candidate count = " << group_count << endl;
+    }
+  
+    thrust::device_vector<hd_float> d_group_peaks(group_count);
+    thrust::device_vector<hd_size>  d_group_inds(group_count);
+    thrust::device_vector<hd_size>  d_group_begins(group_count);
+    thrust::device_vector<hd_size>  d_group_ends(group_count);
+    thrust::device_vector<hd_size>  d_group_filter_inds(group_count);
+    thrust::device_vector<hd_size>  d_group_dm_inds(group_count);
+    thrust::device_vector<hd_size>  d_group_members(group_count);
+  
+    thrust::device_vector<hd_float> d_group_dms(group_count);
+  
+    RawCandidates d_groups;
+    d_groups.peaks = thrust::raw_pointer_cast(&d_group_peaks[0]);
+    d_groups.inds = thrust::raw_pointer_cast(&d_group_inds[0]);
+    d_groups.begins = thrust::raw_pointer_cast(&d_group_begins[0]);
+    d_groups.ends = thrust::raw_pointer_cast(&d_group_ends[0]);
+    d_groups.filter_inds = thrust::raw_pointer_cast(&d_group_filter_inds[0]);
+    d_groups.dm_inds = thrust::raw_pointer_cast(&d_group_dm_inds[0]);
+    d_groups.members = thrust::raw_pointer_cast(&d_group_members[0]);
+  
+    merge_candidates(giant_count,
+                     d_giant_labels_ptr,
+                     *(ConstRawCandidates*)&d_giants,
+                     d_groups);
+  
+    // Look up the actual DM of each group
+    thrust::device_vector<hd_float> d_dm_list(dm_list, dm_list+dm_count);
+    thrust::gather(d_group_dm_inds.begin(), d_group_dm_inds.end(),
+                   d_dm_list.begin(),
+                   d_group_dms.begin());
+  
+    // Device to host transfer of candidates
+    h_group_peaks = d_group_peaks;
+    h_group_inds = d_group_inds;
+    h_group_begins = d_group_begins;
+    h_group_ends = d_group_ends;
+    h_group_filter_inds = d_group_filter_inds;
+    h_group_dm_inds = d_group_dm_inds;
+    h_group_members = d_group_members;
+    h_group_dms = d_group_dms;
+    //h_group_flags = d_group_flags;
   }
-  
-  hd_size label_count;
-  error = label_candidate_clusters(giant_count,
-                                   *(ConstRawCandidates*)&d_giants,
-                                   pl->params.cand_sep_time,
-                                   pl->params.cand_sep_filter,
-                                   pl->params.cand_sep_dm,
-                                   d_giant_labels_ptr,
-                                   &label_count);
-  if( error != HD_NO_ERROR ) {
-    return throw_error(error);
-  }
-  
-  hd_size group_count = label_count;
-  if( pl->params.verbosity >= 2 ) {
-    cout << "Candidate count = " << group_count << endl;
-  }
-  
-  thrust::device_vector<hd_float> d_group_peaks(group_count);
-  thrust::device_vector<hd_size>  d_group_inds(group_count);
-  thrust::device_vector<hd_size>  d_group_begins(group_count);
-  thrust::device_vector<hd_size>  d_group_ends(group_count);
-  thrust::device_vector<hd_size>  d_group_filter_inds(group_count);
-  thrust::device_vector<hd_size>  d_group_dm_inds(group_count);
-  thrust::device_vector<hd_size>  d_group_members(group_count);
-  
-  thrust::device_vector<hd_float> d_group_dms(group_count);
-  
-  RawCandidates d_groups;
-  d_groups.peaks = thrust::raw_pointer_cast(&d_group_peaks[0]);
-  d_groups.inds = thrust::raw_pointer_cast(&d_group_inds[0]);
-  d_groups.begins = thrust::raw_pointer_cast(&d_group_begins[0]);
-  d_groups.ends = thrust::raw_pointer_cast(&d_group_ends[0]);
-  d_groups.filter_inds = thrust::raw_pointer_cast(&d_group_filter_inds[0]);
-  d_groups.dm_inds = thrust::raw_pointer_cast(&d_group_dm_inds[0]);
-  d_groups.members = thrust::raw_pointer_cast(&d_group_members[0]);
-  
-  merge_candidates(giant_count,
-                   d_giant_labels_ptr,
-                   *(ConstRawCandidates*)&d_giants,
-                   d_groups);
-  
-  // Look up the actual DM of each group
-  thrust::device_vector<hd_float> d_dm_list(dm_list, dm_list+dm_count);
-  thrust::gather(d_group_dm_inds.begin(), d_group_dm_inds.end(),
-                 d_dm_list.begin(),
-                 d_group_dms.begin());
-  
-  thrust::host_vector<hd_float> h_group_peaks = d_group_peaks;
-  thrust::host_vector<hd_size>  h_group_inds = d_group_inds;
-  thrust::host_vector<hd_size>  h_group_begins = d_group_begins;
-  thrust::host_vector<hd_size>  h_group_ends = d_group_ends;
-  thrust::host_vector<hd_size>  h_group_filter_inds = d_group_filter_inds;
-  thrust::host_vector<hd_size>  h_group_dm_inds = d_group_dm_inds;
-  thrust::host_vector<hd_size>  h_group_members = d_group_members;
-  thrust::host_vector<hd_float> h_group_dms = d_group_dms;
-  //thrust::host_vector<hd_size>  h_group_flags = d_group_flags;
   
   if( pl->params.verbosity >= 2 ) {
     cout << "Writing output candidates, utc_start=" << pl->params.utc_start << endl;
@@ -828,10 +846,10 @@ hd_error hd_execute(hd_pipeline pl,
                   << h_group_filter_inds[i] << "\t"
                   << h_group_dm_inds[i] << "\t"
                   << h_group_dms[i] << "\t"
-                //<< h_group_flags[i] << "\t"
+                  //<< h_group_flags[i] << "\t"
                   << h_group_members[i] << "\t"
-                // HACK %13
-                //<< (beam+pl->params.beam)%13+1 << "\t"
+                  // HACK %13
+                  //<< (beam+pl->params.beam)%13+1 << "\t"
                   << first_idx + h_group_begins[i] << "\t"
                   << first_idx + h_group_ends[i] << "\t"
                   << "\n";

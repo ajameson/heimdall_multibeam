@@ -85,6 +85,10 @@ class SNRTimePlot(object):
             ymax = row[5]
           if (row[5] < ymin):
             ymin = row[5]
+
+        print "ymin = " + str(ymin) + " ymax=" + str(ymax)
+        if ymax > 1e10:
+          ymax = 10
         
         self.g('set autoscale x')
         self.g('set yrange ['+str(ymin)+':'+str(ymax)+']')
@@ -157,6 +161,75 @@ class FreqTimePlot(object):
         # TODO: Work out equation for DM curve in pixel coords
         self.g('plot "' + data + '" matrix with image notitle, g(x) w l notitle lw 2 lc 2 axes x2y2')
 
+def plotCandDspsr(fil_file, utc_start, sample, filter, dm):
+
+  Dada.logMsg(1, DL, "plotCandDspsr: utc_start =" + utc_start)
+  ddd_time = convertTime(utc_start)
+  Dada.logMsg(1, DL, "plotCandDspsr: ddd_time=" + ddd_time)
+
+  # cmd = "getMJD " + ddd_time + " |& tail -n 1"
+  # p = os.popen(cmd)
+  # utc_start_mjd = p.readline().strip()
+  # p.close()
+  # Dada.logMsg(1, DL, "main: utc_start_mjd=" + utc_start_mjd )
+
+  cand_time = (0.000064 * sample)
+  cmd = "dmsmear -f 1382 -b 400 -n 1024 -d " + str(dm) + " -q 2>&1 "
+  p = os.popen(cmd)
+  cand_band_smear = p.readline().strip()
+  p.close()
+  Dada.logMsg(1, DL, "plotCandDspsr: cand_band_smear=" + str(float(cand_band_smear) * 1000) + " ms")
+
+  cand_filter_time = (2 ** filter) * 0.000064
+  Dada.logMsg(1, DL, "plotCandDspsr cand_filter_time=" + str(cand_filter_time * 1000) + " ms")
+
+  cand_smearing = float(cand_band_smear) + float(cand_filter_time)
+
+  Dada.logMsg(1, DL, "plotCandDspsr cand_smearing=" + str(cand_smearing * 1000) + " ms")
+
+  cand_start_time = cand_time
+  cand_tot_time   = cand_smearing
+
+  cmd = "dspsr " + fil_file + " -S " + str(cand_start_time) + \
+        " -b 512 " + \
+        " -T " + str(cand_tot_time) + \
+        " -c " + str(cand_tot_time) + \
+        " -D " + str(dm) + \
+        " -U 8" + \
+        " 2>&1 | grep unloading | awk '{print $NF}'"
+
+  # create a temporary working directory
+  workdir = tempfile.mkdtemp()
+
+  os.chdir(workdir)
+
+  Dada.logMsg(1, DL, "plotCandDspsr: " + cmd)
+  p = os.popen(cmd)
+  response = p.readline().strip()
+  p.close()
+
+  archive = response + ".ar"
+  count = 10 
+  while ((not os.path.exists(archive)) and count > 0):
+    Dada.logMsg(1, DL, "plotCandDspsr: archive file [" + archive + "] did not exist")
+    time.sleep(1)
+    count = count - 1
+
+  binary_data = []
+  # cmd = "psrplot -j 'zap chan 0-160' -c y:win=1525:1182 -p freq ./" + archive + " -D -/PNG";
+  cmd = "psrplot -J /home/dada/linux_64/bin/zap.psh -j 'zap chan 0-160,335-338' -c x:unit=ms -p freq+ ./" + archive + " -j 'F 128' -D -/PNG";
+  Dada.logMsg(1, DL, "plotCandDspsr: " + cmd)
+  p = os.popen(cmd)
+  binary_data = p.read()
+  p.close()
+  
+  if os.path.exists(archive):
+    os.remove(archive)
+  os.chdir ("/")
+  os.rmdir(workdir)
+
+  return binary_data
+
 
 def plotCandidate(fil_file, sample, filter, dm):
 
@@ -168,7 +241,7 @@ def plotCandidate(fil_file, sample, filter, dm):
   # change to temp dir
   workdir = tempfile.mkdtemp()
 
-  # check the DM2000 file exists
+  # check the file exists
   dmlist = DM_LIST
 
   try:
@@ -384,83 +457,28 @@ try:
             p.close()
 
             Dada.logMsg(1, DL, "main: proc_type="+proc_type)
-            
-            if (proc_type == "dspsr"):
-
-              ddd_time = convertTime(utc_start)
-              Dada.logMsg(1, DL, "main: ddd_time=" + ddd_time)
-
-              # cmd = "getMJD " + ddd_time + " |& tail -n 1"
-              # p = os.popen(cmd)
-              # utc_start_mjd = p.readline().strip()
-              # p.close()
-              # Dada.logMsg(1, DL, "main: utc_start_mjd=" + utc_start_mjd )
-
-              cand_time = (0.000064 * sample)
-              cmd = "dmsmear -f 1382 -b 400 -n 1024 -d " + str(dm) + " -q 2>&1 "
-              p = os.popen(cmd) 
-              cand_band_smear = p.readline().strip()
-              p.close()
-              Dada.logMsg(1, DL, "main: cand_band_smear='" + cand_band_smear + "'")
-
-              cand_filter_time = (2 ** filter) * 0.000064
-
-              cand_smearing = float(cand_band_smear) + float(cand_filter_time)
-
-              cand_start_time = cand_time - (1 * cand_smearing)
-
-              cand_tot_time   = 2 * cand_smearing
-
-              cmd = "dspsr " + fil_file + " -S " + str(cand_start_time) + \
-                    " -b 64 " + \
-                    " -T " + str(cand_tot_time) + \
-                    " -c " + str(cand_tot_time) + \
-                    " -D " + str(dm) + \
-                    " -U 1" + \
-                    " 2>&1 | grep unloading | awk '{print $NF}'"
-              # " -cepoch start" + \
-              Dada.logMsg(1, DL, "main: " + cmd)
-              p = os.popen(cmd) 
-              response = p.readline().strip()
-              p.close()
-
-              archive = response + ".ar"
-              count = 5
-              while ((not os.path.exists(archive)) and count > 0):
-                time.sleep(1)
-                count = count - 1 
-
-              binary_data = []
-              cmd = "psrplot -j 'F 32' -p freq+ ./" + archive + " -D -/PNG";
-              Dada.logMsg(1, DL, "main: " + cmd)
-              p = os.popen(cmd)
-              binary_data = p.read()
-              p.close()
-
-              binary_len = len(binary_data)
-              Dada.logMsg(1, DL, "main: sending binary data len="+str(binary_len))
-              handle.send(binary_data)
-
-              cmd = "rm -f " + archive
-              Dada.logMsg(1, DL, "main: " + cmd)
-              p = os.popen(cmd)
-              binary_data = p.read()
-              p.close()
-
+      
+            try:
+              fptr = open(fil_file, 'r')
+            except IOError:
+              Dada.logMsg(1, DL, "main: could not open filterbank file for reading")
+              fil_file = ""
             else:
+              fptr.close()
+       
+            if len(fil_file) == 0:
+              Dada.logMsg(1, DL, "main: could not find filterbank file")
+            else:
+              binary_data = []
 
-              try:
-                fptr = open(fil_file, 'r')
-              except IOError:
-                Dada.logMsg(1, DL, "main: could not open filterbank file for reading")
-                fil_file = ""
-              else:
-                fptr.close()
+              if (proc_type == "dspsr"):
+                Dada.logMsg(2, DL, "main: plotCandDspsr()")
+                binary_data = plotCandDspsr(fil_file, utc_start, sample, filter, dm)
+                binary_len = len(binary_data)
+                Dada.logMsg(3, DL, "main: sending binary data len="+str(binary_len))
+                handle.send(binary_data)
 
-              if len(fil_file) == 0:
-                Dada.logMsg(1, DL, "main: could not find filterbank file")
               else:
-                binary_data = []
                 Dada.logMsg(2, DL, "main: plotCandidate()")
                 binary_data = plotCandidate(fil_file, sample, filter, dm)
                 binary_len = len(binary_data)
