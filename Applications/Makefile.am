@@ -4,7 +4,7 @@ INCLUDES = -I$(top_srcdir)/src
 
 include_HEADERS = 
 
-bin_PROGRAMS = heimdall coincidencer coincidencer_client candidate_profiler
+bin_PROGRAMS = heimdall coincidencer coincidencer_client candidate_profiler fil2pgm
 
 # To find the dedisp lib from bbarsdell
 AM_CPPFLAGS = -I../ -I../Formats -I../Network -I../Pipeline -I$(HOME) @PSRDADA_CFLAGS@ @DEDISP_CFLAGS@

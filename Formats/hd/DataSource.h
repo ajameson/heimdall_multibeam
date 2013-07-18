@@ -9,6 +9,8 @@
 #ifndef __DataSource_h
 #define __DataSource_h
 
+#define HD_TIMESTR "%Y-%m-%d-%H:%M:%S"
+
 class DataSource {
 
   public:

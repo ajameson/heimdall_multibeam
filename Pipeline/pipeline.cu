@@ -37,14 +37,13 @@ using thrust::device_vector;
 #include "hd/label_candidate_clusters.h"
 #include "hd/merge_candidates.h"
 
+#include "hd/DataSource.h"
 #include "hd/ClientSocket.h"
 #include "hd/SocketException.h"
 #include "hd/stopwatch.h"         // For benchmarking
 //#include "write_time_series.h" // For debugging
 
 #include <dedisp.h>
-#include <dada_def.h>
-
 
 #define HD_BENCHMARK
 
@@ -767,7 +766,7 @@ hd_error hd_execute(hd_pipeline pl,
 
   char buffer[64];
   time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
-  strftime (buffer, 64, DADA_TIMESTR, (struct tm*) gmtime(&now));
+  strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&now));
 
   std::stringstream ss;
   ss << std::setw(2) << std::setfill('0') << (pl->params.beam)%13+1;
@@ -780,12 +779,12 @@ hd_error hd_execute(hd_pipeline pl,
     {
       ClientSocket client_socket ( pl->params.coincidencer_host, pl->params.coincidencer_port );
 
-      strftime (buffer, 64, DADA_TIMESTR, (struct tm*) gmtime(&(pl->params.utc_start)));
+      strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&(pl->params.utc_start)));
 
       oss <<  buffer << " ";
 
       time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
-      strftime (buffer, 64, DADA_TIMESTR, (struct tm*) gmtime(&now));
+      strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&now));
       oss << buffer << " ";
 
       oss << first_idx << " ";

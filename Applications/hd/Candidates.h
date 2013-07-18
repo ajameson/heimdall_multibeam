@@ -11,6 +11,10 @@
 #include <string>
 
 #include <inttypes.h>
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE /* glibc2 needs this for strptime  */
+#endif
+#include <time.h>
 
 class Candidate 
 {
@@ -82,6 +86,9 @@ class CandidateChunk
     std::string   utc_start;
 
     int verbose;
+
+    time_t str2utctime (const char* str);
+    time_t str2utctm (struct tm* time, const char* str);
 
 };
 
