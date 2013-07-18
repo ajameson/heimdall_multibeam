@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <libgen.h>
 #include <sys/stat.h>
+#include <string.h>
 
 using namespace std;
 
@@ -282,4 +283,25 @@ time_t CandidateChunk::get_relative_age (std::string utc)
   time_t self_age = str2utctime (first_sample_utc.c_str());
   time_t utc_age = str2utctime (utc.c_str());
   return (utc_age - self_age);
+}
+
+time_t CandidateChunk::str2utctime (const char* str)
+{
+  struct tm time;
+  return str2utctm (&time, str);
+}
+
+time_t CandidateChunk::str2utctm (struct tm* time, const char* str)
+{
+  
+  /* append the GMT+0 timeszone information */
+  char * str_utc = (char *) malloc(sizeof(char) * (strlen(str) + 4 + 1));
+  sprintf(str_utc, "%s UTC",str);
+
+  const char * format = "%Y-%m-%d-%H:%M:%S %Z";
+  
+  strptime(str_utc, format, time);
+
+  free(str_utc);
+  return timegm(time);
 }

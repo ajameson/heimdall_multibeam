@@ -13,8 +13,6 @@ using std::endl;
 #include "hd/header.h"
 #include "hd/SigprocFile.h"
 
-#include "dada_def.h"
-
 SigprocFile::SigprocFile (const char* filename)
   : m_file_stream(filename, std::ios::binary), DataSource ()
 {
@@ -46,7 +44,7 @@ SigprocFile::SigprocFile (const char* filename)
   utc_start = mjd2utctm (m_header.tstart);
   int buffer_size = 64;
   char buffer[buffer_size];
-  strftime (buffer, buffer_size, DADA_TIMESTR, localtime (&utc_start));
+  strftime (buffer, buffer_size, HD_TIMESTR, localtime (&utc_start));
 
   stride = (nchan * nbit) / (8 * sizeof(char));
 
