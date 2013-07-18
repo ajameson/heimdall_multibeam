@@ -7,6 +7,7 @@
 
 #include "hd/median_filter.h"
 
+#include <thrust/device_ptr.h>
 #include <thrust/transform.h>
 #include <thrust/adjacent_difference.h>
 #include <thrust/iterator/counting_iterator.h>

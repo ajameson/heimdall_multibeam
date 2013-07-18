@@ -359,12 +359,11 @@ hd_error label_candidate_clusters(hd_size            count,
 	//         as efficient as the sequential version but should win out
 	//         in overall speed.
 
-
 	unsigned int* d_counter_address;
-	cudaGetSymbolAddress((void**)&d_counter_address, "d_counter");
+	cudaGetSymbolAddress((void**)&d_counter_address, d_counter);
 	thrust::device_ptr<unsigned int> d_counter_ptr(d_counter_address);
 	*d_counter_ptr = 0;
-	
+  
 	thrust::for_each(make_counting_iterator<unsigned int>(0),
 	                 make_counting_iterator<unsigned int>(count),
 	                 trace_equivalency_chain<hd_size>(d_labels));

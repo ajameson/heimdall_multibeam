@@ -24,6 +24,7 @@ using thrust::device_vector;
 #include <thrust/copy.h>
 #include <thrust/reduce.h>
 #include <thrust/iterator/constant_iterator.h>
+#include <thrust/gather.h>
 
 #include "hd/pipeline.h"
 #include "hd/maths.h"
