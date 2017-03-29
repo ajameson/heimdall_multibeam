@@ -30,11 +30,14 @@ int quit_threads = 0;
 void usage(void)
 {
   fprintf(stdout, "coincidencer [options] [beam_candidate_files]\n");
-  fprintf(stdout, "  -h          print this help text\n");
-  fprintf(stdout, "  -a address  interface for candidate events\n");
-  fprintf(stdout, "  -n nbeams   number of beams to expect data from\n");
-  fprintf(stdout, "  -p port     port for candidate events\n");
-  fprintf(stdout, "  -v          verbose output\n");
+  fprintf(stdout, "  ** assumes beams are counted from 1\n");
+  fprintf(stdout, "  -f sep_filter  separation filter [default 4]\n");
+  fprintf(stdout, "  -h             print this help text\n");
+  fprintf(stdout, "  -t sep_time    separation time [default 3]\n");
+  fprintf(stdout, "  -a address     interface for candidate events\n");
+  fprintf(stdout, "  -n nbeams      number of beams to expect data from\n");
+  fprintf(stdout, "  -p port        port for candidate events\n");
+  fprintf(stdout, "  -v             verbose output\n");
 }
 
 void signal_handler(int signalValue);
@@ -64,13 +67,25 @@ int main(int argc, char* argv[])
 
   unsigned int verbose = 0;
 
-  while ((arg = getopt (argc, argv, "a:hn:p:v")) != -1)
+  unsigned sep_time = 3;
+
+  unsigned sep_filter = 4;
+
+  while ((arg = getopt (argc, argv, "a:f:hn:p:t:v")) != -1)
   {
     switch (arg)
     {
 
       case 'a':
         address = strdup (optarg);
+        break;
+
+      case 't':
+        sep_time = atoi (optarg);
+        break;
+
+      case 'f':
+        sep_filter = atoi (optarg);
         break;
 
       case 'h':
@@ -97,7 +112,7 @@ int main(int argc, char* argv[])
     }
   }
 
-  signal(SIGINT, signal_handler);
+  //signal(SIGINT, signal_handler);
 
   bool continue_processing = true;
   int nfiles = (argc - optind);
@@ -108,19 +123,24 @@ int main(int argc, char* argv[])
   while ( continue_processing )
   {
 
-    int beam_number = 0;
     unsigned i = 0;
 
     if (nfiles > 0)
     {
       chunks.resize(1);
 
+      if (verbose)
+        cerr << "Creating new CandidateChunk with " << total_beams << " beams" << endl; 
       // create a canidate chunk from a bunch o cand files
-      chunks[0] = new CandidateChunk (argc, optind, argv);
+      chunks[0] = new CandidateChunk (total_beams, argc, optind, argv);
 
+      if (verbose)
+        cerr << "Computing coincidence over sep_time=" << sep_time << " sep_filter=" << sep_filter << endl;
       // compute coincidence information from loaded files
-      chunks[0]->compute_coincidence();
+      chunks[0]->compute_coincidence(sep_time, sep_filter);
 
+      if (verbose)
+        cerr << "Writing out candidates" << endl;
       // write the output
       chunks[0]->write_coincident_candidates();
     }
@@ -132,6 +152,8 @@ int main(int argc, char* argv[])
 
       while ( waiting_for_beams )
       {
+        if (verbose)
+          cerr << "Waiting for socket connections" << endl;
         // create the conversational socket
         ServerSocket new_sock;
         connections_waiting = 0;
@@ -146,7 +168,6 @@ int main(int argc, char* argv[])
         {
           waiting_for_beams = false;
           continue_processing = false;
-          cerr << "quit_threads now true" << endl;
           continue;
         }
 
@@ -182,16 +203,16 @@ int main(int argc, char* argv[])
           string utc_start;
           string first_sample_utc;
           uint64_t first_sample_index;
-          int beam_number;
+          int nbeams;
           uint64_t num_events;
 
-          iss >> utc_start >> first_sample_utc >> first_sample_index >> beam_number >> num_events >> ws;
+          iss >> utc_start >> first_sample_utc >> first_sample_index >> nbeams >> num_events >> ws;
 
           if (verbose)
           {
             cerr << "main: UTC_START=" << utc_start << " SAMPLE_UTC=" << first_sample_utc 
                  << " SAMPLE_IDX=" << first_sample_index 
-                 << " BEAM=" << beam_number << " NUM_EVENTS=" << num_events << endl;
+                 << " NBEAMS=" << nbeams << " NUM_EVENTS=" << num_events << endl;
           }
 
           // check first_sample_utc to see if it matches an existing chunk
@@ -224,7 +245,7 @@ int main(int argc, char* argv[])
             {
               if (verbose > 1)
                 cerr << "main: creating new chunk for " << first_sample_utc << endl;
-              chunks.push_back (new CandidateChunk());
+              chunks.push_back (new CandidateChunk(total_beams));
               curr_chunk = chunks.size() - 1; 
             }
             else
@@ -239,12 +260,15 @@ int main(int argc, char* argv[])
           if (curr_chunk >= 0)
           {
             if (verbose > 1)
-              cerr << "main: chunks[" << curr_chunk <<"]->addBeam(" << beam_number << ")" << endl;
-            chunks[curr_chunk]->addBeam(utc_start, first_sample_utc, first_sample_index, beam_number, num_events, iss);
+              cerr << "main: chunks[" << curr_chunk <<"]->addBeam()" << endl;
+            chunks[curr_chunk]->addBeam (utc_start, first_sample_utc, first_sample_index, nbeams, num_events, iss);
             
             // if we have reached the specified number of beams for this 
             // chunk, or if more than 3 chunks are stored, dump a chunk
-            if (chunks[curr_chunk]->get_n_beams() == total_beams || chunks.size() > max_chunks_to_wait)
+            if (verbose > 1)
+              cerr << "main: chunks[" << curr_chunk << "]->get_nbeam()=" 
+                   << chunks[curr_chunk]->get_nbeam() << " total_nbeams=" << total_beams << endl;
+            if (chunks[curr_chunk]->get_nbeam() == total_beams || chunks.size() > max_chunks_to_wait)
               waiting_for_beams = false;
           }
           iss.str("");
@@ -264,8 +288,8 @@ int main(int argc, char* argv[])
 
         // perform coincidence calculations
         if (verbose > 1)
-          cerr << "main: chunks["<<curr_chunk<<"]->compute_coincidence()" << endl;
-        chunks[curr_chunk]->compute_coincidence();
+          cerr << "main: chunks["<<curr_chunk<<"]->compute_coincidence(" << sep_time << ", " << sep_filter << ")" << endl;
+        chunks[curr_chunk]->compute_coincidence(sep_time, sep_filter);
 
         // write the output
         if (verbose > 1)

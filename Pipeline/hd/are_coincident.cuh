@@ -18,6 +18,7 @@ bool ranges_overlap(hd_size bi, hd_size ei,
 
 inline __host__ __device__
 bool are_coincident(hd_size samp_i, hd_size samp_j,
+                    hd_size beam_i, hd_size beam_j,
                     hd_size begin_i, hd_size begin_j,
                     hd_size end_i, hd_size end_j,
                     hd_size filter_i, hd_size filter_j,
@@ -36,7 +37,8 @@ bool are_coincident(hd_size samp_i, hd_size samp_j,
 	//	abs((int)filter_j - (int)filter_i) <= filter_tol &&
 	//	abs((int)dm_j - (int)dm_i ) <= dm_tol;
 	// New version avoiding use of 'begin' and 'end'
-	return abs((int)samp_j-(int)samp_i) <= time_tol &&
+	return beam_i == beam_j &&
+    abs((int)samp_j-(int)samp_i) <= time_tol &&
 		abs((int)filter_j - (int)filter_i) <= filter_tol &&
 		abs((int)dm_j - (int)dm_i ) <= dm_tol;
 }

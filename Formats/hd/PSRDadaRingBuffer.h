@@ -21,7 +21,8 @@ class PSRDadaRingBuffer : public DataSource {
     bool read_header ();
 
     bool   get_error()  const { return dada_error; }
-    size_t get_data(size_t nsamps, char* data);
+    size_t get_data (size_t nsamps, char* data);
+    size_t get_data_block (size_t nsamps, char* data);
 
   private:
 
@@ -32,6 +33,22 @@ class PSRDadaRingBuffer : public DataSource {
     bool dada_error;
 
     bool printed_first_line;
+
+    unsigned resolution;
+
+    char order[4];
+
+    // size of the data block buffer
+    uint64_t buf_sz;
+
+    // number of samples per buffer
+    uint64_t samples_per_buf;
+
+    // number of bytes read in the currently open buffer
+    uint64_t bytes_read;
+
+    // pointer to the current buffer
+    char * curr_block;
 
 };
 

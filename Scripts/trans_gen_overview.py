@@ -157,7 +157,7 @@ class DMSNRPlot(object):
         self.dm_base = 1.0
         self.snr_base = 5.9
         self.max_filter = 12
-        self.dt = 64e-6
+        self.dt = 655.36e-6
     def plot(self, data):
         self.g.reset()
         self.g('set size 0.5,0.5')
@@ -360,7 +360,8 @@ if __name__ == "__main__":
     filename = args.cands_file
     nbeams = args.nbeams
     interactive = args.interactive
-    std_out = args.std_out
+    #std_out = args.std_out
+    std_out = None
     just_time_dm = args.just_time_dm
     verbose = args.verbose
     cand_list_xml = args.cand_list_xml
@@ -420,13 +421,13 @@ if __name__ == "__main__":
     categories["lowdm"]  = all_cands[is_lowdm]
     categories["valid"]  = all_cands[is_valid]
     
-    if verbose:
-      sys.stderr.write ( "Classified %i as hidden\n" % len(categories["hidden"]))
-      sys.stderr.write ( "           %i as noise spikes\n" % len(categories["noise"]))
-      sys.stderr.write ( "           %i as coincident RFI\n" % len(categories["coinc"]))
-      sys.stderr.write ( "           %i as fat RFI\n" % len(categories["fat"]))
-      sys.stderr.write ( "           %i as low-DM RFI\n" % len(categories["lowdm"]))
-      sys.stderr.write ( "           %i as valid candidates\n" % len(categories["valid"]))
+    #if verbose:
+    sys.stderr.write ( "Classified %i as hidden\n" % len(categories["hidden"]))
+    sys.stderr.write ( "           %i as noise spikes\n" % len(categories["noise"]))
+    sys.stderr.write ( "           %i as coincident RFI\n" % len(categories["coinc"]))
+    sys.stderr.write ( "           %i as fat RFI\n" % len(categories["fat"]))
+    sys.stderr.write ( "           %i as low-DM RFI\n" % len(categories["lowdm"]))
+    sys.stderr.write ( "           %i as valid candidates\n" % len(categories["valid"]))
     
     if verbose:
       sys.stderr.write ( "Building histograms...\n")
@@ -447,7 +448,7 @@ if __name__ == "__main__":
         sys.stderr.write ( "Generating plots...\n")
       g = Gnuplot.Gnuplot(debug=0)
       if not interactive:
-          g('set terminal pngcairo enhanced font "arial,10" size ' + res_x + ', ' + res_y)
+          g('set terminal png enhanced font "arial,10" size ' + res_x + ', ' + res_y)
           if std_out:
               g('set output')
               if verbose:

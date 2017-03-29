@@ -6,6 +6,7 @@
  ***************************************************************************/
 
 #include "hd/median_filter.h"
+#include <stdio.h>
 
 #include <thrust/device_ptr.h>
 #include <thrust/transform.h>
@@ -181,7 +182,6 @@ struct median_scrunch5_array_kernel
 	hd_float operator()(unsigned int i) const {
 		hd_size array = i / size;
 		hd_size j     = i % size;
-		
 		hd_float a = in[(5*array+0)*size + j];
 		hd_float b = in[(5*array+1)*size + j];
 		hd_float c = in[(5*array+2)*size + j];
@@ -308,6 +308,7 @@ hd_error median_scrunch5_array(const hd_float* d_in,
 	hd_size out_count = count / 5;
 	hd_size total     = array_size * out_count;
 	using thrust::make_counting_iterator;
+	//printf("%d %d\n",out_count,total);
 	thrust::transform(make_counting_iterator<unsigned int>(0),
 	                  make_counting_iterator<unsigned int>(total),
 	                  d_out_begin,

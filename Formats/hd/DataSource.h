@@ -24,7 +24,9 @@ class DataSource {
       beam = 0;
       utc_start = 0;
       tsamp = 0;
-      spectra_rate= 0;
+      spectra_rate = 0;
+      nbeams = 0;
+      nsamps_block = 1;
     }
     virtual ~DataSource() {}
 
@@ -32,11 +34,13 @@ class DataSource {
     size_t get_nbit()  const { return nbit; }
     size_t get_stride() const { return stride; }
     size_t get_beam()   const { return beam; }
+    size_t get_nbeams() const { return nbeams; }
     time_t get_utc_start()  const { return utc_start; }
     double get_spectra_rate() const  { return spectra_rate; }
     float  get_tsamp()  const { return tsamp; }
     float  get_f0()  const { return f0; }
     float  get_df()  const { return df; }
+    float  get_nsamps_block()  const { return nsamps_block; }
 
     // must be implemented in sub class
     virtual bool   get_error() const = 0;
@@ -83,11 +87,13 @@ class DataSource {
     size_t npol;
     size_t stride;
     size_t beam;
+    size_t nbeams;
     time_t utc_start;
     float  tsamp;
     double f0;
     double df;
     double spectra_rate;
+    size_t nsamps_block;
 
 };
 

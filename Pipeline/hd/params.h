@@ -30,6 +30,7 @@ struct hd_params {
   hd_float baseline_length; // No. seconds over which to smooth the baseline
   // Observational parameters
   hd_size  beam;           // Beam index (0-based)
+  hd_size  nbeams;         // VR_add number of beams
   bool     override_beam;  // override the beam in the file
   hd_size  nchans;         // No. frequency channels
   hd_float dt;             // Sampling time

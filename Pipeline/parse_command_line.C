@@ -96,6 +96,9 @@ int hd_parse_command_line(int argc, char* argv[], hd_params* params)
       params->beam = atoi(argv[++i]) - 1;
       params->override_beam = true;
     }
+    else if( argv[i] == string("-nbeams") ) {
+      params->nbeams = atoi(argv[++i]);
+    }
     else if( argv[i] == string("-beam_count") ) {
       params->beam_count = atoi(argv[++i]);
     }
@@ -169,14 +172,15 @@ void hd_print_usage()
   cout << "    -nsamps_gulp num         number of samples to be read at a time [" << p.nsamps_gulp << "]" << endl;
   cout << "    -baseline_length num     TBA" << endl;
   cout << "    -beam ##                 over-ride beam number" << endl;
+  cout << "    -nbeams ##               give number of beams [def 1]" << endl;
   cout << "    -output_dir path         create all output files in specified path" << endl;
   cout << "    -dm min max              min and max DM" << endl;
   cout << "    -coincidencer host:port  connect to the coincidencer on the specified host and port" << endl;
   cout << "    -zap_chans start end     zap all channels between start and end channels inclusive" << endl;
   cout << "    -max_giant_rate nevents  limit the maximum number of individual detections per minute to nevents" << endl;
-  cout << "    -dm_pulse_width num      TBA" << endl;
-  cout << "    -dm_nbits num            TBA" << endl;
-  cout << "    -scrunching num          TBA" << endl;
+  cout << "    -dm_pulse_width num      expected minimum pulse width [default " << p.dm_pulse_width << "]" << endl;
+  cout << "    -dm_nbits num            number of bits in dedispersed time series" << endl;
+  cout << "    -scrunching              use adaptive dm-dependent time scrunching" << endl;
   cout << "    -scrunching_tol num      TBA" << endl;
   cout << "    -rfi_tol num             TBA" << endl;
   cout << "    -rfi_min_beams num       TBA" << endl;

@@ -20,6 +20,7 @@ void hd_set_default_params(hd_params* params) {
 	params->dm_gulp_size    = 2048;//256;    // TODO: Check that this is good
 	params->baseline_length = 2.0;
 	params->beam            = 0;
+	params->nbeams          = 1;
 	params->override_beam   = false;
 	params->nchans          = 1024;
 	params->dt              = 64e-6;

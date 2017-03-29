@@ -205,7 +205,7 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, hd_params params) {
 
 hd_error hd_execute(hd_pipeline pl,
                     const hd_byte* h_filterbank, hd_size nsamps, hd_size nbits,
-                    hd_size first_idx, hd_size* nsamps_processed) {
+                    hd_size first_idx, hd_size nbeams, hd_size* nsamps_processed) {
   hd_error error = HD_NO_ERROR;
   
   Stopwatch total_timer;
@@ -227,7 +227,8 @@ hd_error hd_execute(hd_pipeline pl,
   // Note: Filterbank cleaning must be done out-of-place
   hd_size nbytes = nsamps * pl->params.nchans * nbits / 8;
   start_timer(memory_timer);
-  pl->h_clean_filterbank.resize(nbytes);
+  //pl->h_clean_filterbank.resize(nbytes);
+  pl->h_clean_filterbank.resize(nbytes, 0);
   std::vector<int>          h_killmask(pl->params.nchans, 1);
   stop_timer(memory_timer);
   
@@ -248,7 +249,8 @@ hd_error hd_execute(hd_pipeline pl,
   }
   // Note: We only clean the narrowest zero-DM signals; otherwise we
   //         start removing real stuff from higher DMs.
-  error = clean_filterbank_rfi(pl->dedispersion_plan,
+  // Commenting out for now... VR
+  /*error = clean_filterbank_rfi(pl->dedispersion_plan,
                                &h_filterbank[0],
                                nsamps,
                                nbits,
@@ -262,7 +264,8 @@ hd_error hd_execute(hd_pipeline pl,
                                1);//pl->params.boxcar_max);
   if( error != HD_NO_ERROR ) {
     return throw_error(error);
-  }
+  }*/
+  std::copy(&h_filterbank[0],&h_filterbank[nsamps*pl->params.nchans],pl->h_clean_filterbank.begin());
 
   if( pl->params.verbosity >= 2 ) {
     cout << "Applying manual killmasks" << endl;
@@ -282,7 +285,7 @@ hd_error hd_execute(hd_pipeline pl,
   if( pl->params.verbosity >= 2 ) {
     cout << "Bad channel count = " << bad_chan_count << endl;
   }
-  
+
   // TESTING
   //h_clean_filterbank.assign(h_filterbank, h_filterbank+nbytes);
   
@@ -350,12 +353,18 @@ hd_error hd_execute(hd_pipeline pl,
   hd_size series_stride    = nsamps_computed;
   
   // Report the number of samples that will be properly processed
-  *nsamps_processed = nsamps_computed - pl->params.boxcar_max;
+  *nsamps_processed = nsamps - (nbeams * (pl->params.boxcar_max + dedisp_get_max_delay(pl->dedispersion_plan)));
+  if (nsamps < nbeams * (pl->params.boxcar_max + dedisp_get_max_delay(pl->dedispersion_plan)))
+     *nsamps_processed = 0;
+
+  //*nsamps_processed = nsamps_computed - (nbeams*pl->params.boxcar_max + (nbeams-1)*dedisp_get_max_delay(pl->dedispersion_plan));
   
-  if( pl->params.verbosity >= 3 ) {
+  if( pl->params.verbosity >= 3 )
+  {
     cout << "dm_count = " << dm_count << endl;
     cout << "max delay = " << dedisp_get_max_delay(pl->dedispersion_plan) << endl;
     cout << "nsamps_computed = " << nsamps_computed << endl;
+    cout << "nsamps_processed = " << *nsamps_processed << endl;
   }
   
   hd_size beam = pl->params.beam;
@@ -366,8 +375,13 @@ hd_error hd_execute(hd_pipeline pl,
   
   start_timer(memory_timer);
   
-  pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count);
-  pl->d_time_series.resize(series_stride);
+  if( pl->params.verbosity >= 2 )
+  {
+    cerr << "series_stride == nsamps_computed = " << series_stride << " dm_count=" << dm_count << endl;
+    cerr << "pl->h_dm_series.resize(" << series_stride * pl->params.dm_nbits/8 * dm_count << ")" << endl;
+  }
+  pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count, 0);
+  pl->d_time_series.resize(series_stride, 0);
   pl->d_filtered_series.resize(series_stride, 0);
   
   stop_timer(memory_timer);
@@ -466,9 +480,10 @@ hd_error hd_execute(hd_pipeline pl,
       break;
     case 32:
       // Note: 32-bit implies float, not unsigned int
-      thrust::copy((float*)&pl->h_dm_series[offset],
-                   (float*)&pl->h_dm_series[offset] + cur_nsamps,
-                   pl->d_time_series.begin());
+      //cerr  << "copying from h_dm_series to d_time_series [" << (&pl->h_dm_series[offset] + cur_nsamps) - (&pl->h_dm_series[offset]) << "]" << endl;
+      thrust::copy( (float*)&pl->h_dm_series[offset],
+                   ((float*)&pl->h_dm_series[offset]) + cur_nsamps,
+                    pl->d_time_series.begin());
       break;
     default:
       return HD_INVALID_NBITS;
@@ -545,6 +560,12 @@ hd_error hd_execute(hd_pipeline pl,
          filter_width*=2 ) {
       hd_size rel_filter_width = filter_width / cur_dm_scrunch;
       hd_size filter_idx = get_filter_index(filter_width);
+
+//#define AJCHANGE
+#ifdef AJCHANGE
+      max_nsamps_filtered = cur_nsamps + 1 - filter_width;
+      cur_filtered_offset = filter_width / 2;
+#endif
       
       if( pl->params.verbosity >= 4 ) {
         cout << "Filtering each beam at width of " << filter_width << endl;
@@ -702,11 +723,13 @@ hd_error hd_execute(hd_pipeline pl,
     }
   
     hd_size label_count;
+    hd_size nsamps_beam  = nsamps / nbeams;
     error = label_candidate_clusters(giant_count,
                                      *(ConstRawCandidates*)&d_giants,
                                      pl->params.cand_sep_time,
                                      pl->params.cand_sep_filter,
                                      pl->params.cand_sep_dm,
+                                     nsamps_beam,
                                      d_giant_labels_ptr,
                                      &label_count);
     if( error != HD_NO_ERROR ) {
@@ -769,47 +792,85 @@ hd_error hd_execute(hd_pipeline pl,
   strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&now));
 
   std::stringstream ss;
-  ss << std::setw(2) << std::setfill('0') << (pl->params.beam)%13+1;
+  ss << std::setw(2) << std::setfill('0') << (pl->params.beam)+1;
 
   std::ostringstream oss;
+
+  // number of samples between in each beam
+  unsigned nsamps_beam  = nsamps / nbeams;
+  // the number of samples that are valid (i.e. the max boxcar does not leak into the next beam)
+  unsigned nsamps_valid = *nsamps_processed / nbeams;
 
   if ( pl->params.coincidencer_host != NULL && pl->params.coincidencer_port != -1 )
   {
     try 
     {
+
+      unsigned n_events = 0;
+      // count the number of valid events
+      for (hd_size i=0; i<h_group_peaks.size(); ++i )
+      {
+        // for this candidate we must determine which beam it is in
+        hd_size beam_idx = (hd_size) floor ((float) (h_group_inds[i]) / (float) nsamps_beam);
+
+        hd_size beam_start = beam_idx * nsamps_beam + (pl->params.boxcar_max/2);
+        hd_size beam_end   = beam_start + nsamps_valid;
+
+        // if the event begins and ends within this beams data
+        if ((beam_start <= h_group_inds[i]) && (h_group_inds[i] < beam_end))
+          n_events++;
+      }
+
       ClientSocket client_socket ( pl->params.coincidencer_host, pl->params.coincidencer_port );
 
+      // send the UTC_START first
       strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&(pl->params.utc_start)));
-
       oss <<  buffer << " ";
 
+      // send the UTC timestamp of the first sample in this block
       time_t now = pl->params.utc_start + (time_t) (first_idx / pl->params.spectra_per_second);
       strftime (buffer, 64, HD_TIMESTR, (struct tm*) gmtime(&now));
       oss << buffer << " ";
 
+      // send the "first_sample nbeams ncands"
       oss << first_idx << " ";
-      oss << ss.str() << " ";
-      oss << h_group_peaks.size() << endl;
+      oss << nbeams << " ";
+      oss << n_events << endl;
       client_socket << oss.str();
       oss.flush();
+
+      // reset oss
       oss.str("");
 
       for (hd_size i=0; i<h_group_peaks.size(); ++i ) 
       {
-        hd_size samp_idx = first_idx + h_group_inds[i];
-        oss << h_group_peaks[i] << "\t"
-                      << samp_idx << "\t"
-                      << samp_idx * pl->params.dt << "\t"
-                      << h_group_filter_inds[i] << "\t"
-                      << h_group_dm_inds[i] << "\t"
-                      << h_group_dms[i] << "\t"
-                      << h_group_members[i] << "\t"
-                      << first_idx + h_group_begins[i] << "\t"
-                      << first_idx + h_group_ends[i] << endl;
+        // for this candidate we must determine which beam it is in
+        hd_size beam_idx = (hd_size) floor ((float) (h_group_inds[i]) / (float) nsamps_beam);
 
-        client_socket << oss.str();
-        oss.flush();
-        oss.str("");
+        hd_size beam_start = beam_idx * nsamps_beam + (pl->params.boxcar_max/2);
+        hd_size beam_end   = beam_start + nsamps_valid;
+
+        // if the event begins and ends within this beams data
+        if ((beam_start <= h_group_inds[i]) && (h_group_inds[i] < beam_end))
+        {
+          hd_size samp_offset = h_group_inds[i] - (nsamps_beam * beam_idx);
+          hd_size samp_idx = first_idx + samp_offset;
+
+          oss << h_group_peaks[i] << "\t"
+              << samp_idx << "\t"
+              << samp_idx * pl->params.dt << "\t"
+              << h_group_filter_inds[i] << "\t"
+              << h_group_dm_inds[i] << "\t"
+              << h_group_dms[i] << "\t"
+              << h_group_members[i] << "\t"
+              << first_idx + h_group_begins[i] << "\t"
+              << first_idx + h_group_ends[i] << "\t"
+              << (pl->params.beam + beam_idx + 1) << endl;
+
+          client_socket << oss.str();
+          oss.flush();
+          oss.str("");
+        }
       }
       // client_socket should close when it goes out of scope...
     }
@@ -817,13 +878,9 @@ hd_error hd_execute(hd_pipeline pl,
     {
       std::cerr << "SocketException was caught:" << e.description() << "\n";
     }
-
   }
-  //else
-  //{
-
-    // HACK %13
-
+  else
+  {
     if( pl->params.verbosity >= 2 )
       cout << "Output timestamp: " << buffer << endl;
 
@@ -838,27 +895,38 @@ hd_error hd_execute(hd_pipeline pl,
 
     if (cand_file.good())
     {
-      for( hd_size i=0; i<h_group_peaks.size(); ++i ) {
-        hd_size samp_idx = first_idx + h_group_inds[i];
-        cand_file << h_group_peaks[i] << "\t"
-                  << samp_idx << "\t"
-                  << samp_idx * pl->params.dt << "\t"
-                  << h_group_filter_inds[i] << "\t"
-                  << h_group_dm_inds[i] << "\t"
-                  << h_group_dms[i] << "\t"
-                  //<< h_group_flags[i] << "\t"
-                  << h_group_members[i] << "\t"
-                  // HACK %13
-                  //<< (beam+pl->params.beam)%13+1 << "\t"
-                  << first_idx + h_group_begins[i] << "\t"
-                  << first_idx + h_group_ends[i] << "\t"
-                  << "\n";
+      for( hd_size i=0; i<h_group_peaks.size(); ++i ) 
+      {
+        // for this candidate we must determine which beam it is in
+        hd_size beam_idx = (hd_size) floor ((float) (h_group_inds[i]) / (float) nsamps_beam);
+
+        hd_size beam_start = beam_idx * nsamps_beam + (pl->params.boxcar_max/2);
+        hd_size beam_end   = beam_start + nsamps_valid;
+
+        // if the event begins and ends within this beams data
+        if ((beam_start <= h_group_inds[i]) && (h_group_inds[i] < beam_end))
+        {
+          hd_size samp_offset = h_group_inds[i] - (nsamps_beam * beam_idx);
+          hd_size samp_idx = first_idx + samp_offset;
+
+          cand_file << h_group_peaks[i] << "\t"
+                    << samp_idx << "\t"
+                    << pl->params.dt * samp_idx << "\t"
+                    << h_group_filter_inds[i] << "\t"
+                    << h_group_dm_inds[i] << "\t"
+                    << h_group_dms[i] << "\t"
+                    << h_group_members[i] << "\t"
+                    << first_idx + (h_group_begins[i] % nsamps_beam) << "\t"
+                    << first_idx + (h_group_ends[i] % nsamps_beam)  << "\t"
+                    << (pl->params.beam + beam_idx + 1) << "\t"
+                    << "\n";
+        }
       }
     }
     else
       cout << "Skipping dump due to bad file open on " << filename << endl;
     cand_file.close();
-  //}
+  }
     
   stop_timer(candidates_timer);
   

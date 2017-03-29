@@ -24,6 +24,8 @@ PSRDadaRingBuffer::PSRDadaRingBuffer (key_t dada_id) : DataSource ()
 {
   dada_error = false;
   printed_first_line = true;
+  resolution = 1;
+  curr_block = 0;
 
   dada_key = dada_id;
 
@@ -58,6 +60,8 @@ bool PSRDadaRingBuffer::connect()
     dada_error = true;
     return false;
   }
+  curr_block = 0;
+  bytes_read = 0;
 	return true;
 }
 
@@ -146,6 +150,9 @@ bool PSRDadaRingBuffer::read_header()
     cerr << "PSRDadaRingBuffer::read_header could not extract NBIT from header" << endl;
     dada_error = true; 
   }
+#ifdef _DEBUG
+  cerr << "PSRDadaRingBuffer::read_header nbit=" << nbit << endl;
+#endif
 
   if (ascii_header_get (header, "TSAMP", "%f", &tsamp) < 0)
   {
@@ -153,11 +160,45 @@ bool PSRDadaRingBuffer::read_header()
     dada_error = true;
   }
 
+  if (ascii_header_get (header, "NBEAM", "%d", &nbeams) < 0)
+  {
+    cerr << "PSRDadaRingBuffer::read_header could not extract NBEAM from header, assuming 1" << endl;
+    nbeams = 1;
+  }
+
   if (ascii_header_get (header, "BEAM", "%d", &beam) < 0)
   {
-    cerr << "PSRDadaRingBuffer::read_header could not extract BEAM from header, assuming 0" << endl;
-		beam = 0;
+    if (nbeams == 1)
+      cerr << "PSRDadaRingBuffer::read_header could not extract BEAM from header, assuming 0" << endl;
+    beam = 0;
   }
+
+  if (ascii_header_get (header, "RESOLUTION", "%u", &resolution) < 0)
+  {
+    resolution = nchan * npol * (nbit/8);
+    cerr << "PSRDadaRingBuffer::read_header could not extract RESOLUTION from header, using " << resolution << endl;
+  }
+
+  if (ascii_header_get (header, "ORDER", "%s", order) < 0)
+  {
+    cerr << "PSRDadaRingBuffer::read_header could not extract ORDER from header" << endl;
+    dada_error = true;
+  }
+
+  if ((nbeams == 1) && (strcmp(order, "TF") != 0))
+  {
+    cerr << "PSRDadaRingBuffer::read_header 1 beam but data order not TF" << endl;
+    dada_error = true;
+  }
+
+  if ((nbeams > 1) && (strcmp(order, "STF") != 0))
+  {
+    cerr << "PSRDadaRingBuffer::read_header nbeam=" << nbeams << " but data order not STF" << endl;
+    dada_error = true;
+  }
+
+  nsamps_block = (size_t) resolution / (nbeams * nchan * npol * (nbit/8));
+  //cerr << "PSRDadaRingBuffer::read_header resolution=" << resolution << " nsamps_block=" << nsamps_block << endl;
 
   char utc_start_str[64] = "";
   if (ascii_header_get (header, "UTC_START", "%s", utc_start_str) < 0)
@@ -168,18 +209,32 @@ bool PSRDadaRingBuffer::read_header()
   else
     utc_start = str2utctime (utc_start_str);
 
-	// TODO fix the fact that we acually have npol == 2 !!!!!!!!!!!!!!
 	stride = nchan * (nbit / 8);
   spectra_rate = 1000000 / (double) tsamp;
 
   // convert tsamp from usecs (DADA DEFAULT) to seconds
   tsamp /= 1000000;
 
+  // get the DADA buffer size
+  buf_sz = ipcbuf_get_bufsz ( (ipcbuf_t *) hdu->data_block);
+
+  // get the samples per DADA buffer
+  samples_per_buf = buf_sz / (npol * nchan * (nbit/8));
+
+  if (buf_sz != resolution && nbeams > 1)
+  {
+    cerr << "PSRDadaRingBuffer::read_header buf_sz != resolution and multibeam data" << endl;
+    dada_error = true;
+  }
+
 #ifdef _DEBUG
   cerr << "PSRDadaRingBuffer::read_header utc_start_str=" << utc_start_str << endl;
   cerr << "PSRDadaRingBuffer::read_header utc_start=" << utc_start << endl;
   cerr << "PSRDadaRingBuffer::read_header tsamp=" << tsamp << endl;
   cerr << "PSRDadaRingBuffer::read_header spectra_rate =" << spectra_rate << endl;
+  cerr << "PSRDadaRingBuffer::read_header resolution=" << resolution << endl;
+  cerr << "PSRDadaRingBuffer::read_header nbeams=" << nbeams << endl;
+  cerr << "PSRDadaRingBuffer::read_header nsamps_block=" << nsamps_block << endl;
 #endif
 
   if (dada_error)
@@ -193,8 +248,13 @@ bool PSRDadaRingBuffer::read_header()
 size_t PSRDadaRingBuffer::get_data(size_t nsamps, char* data)
 {
 #ifdef _DEBUG
-	cerr << "PSRDadaRingBuffer::get_data: nsamps=" << nsamps << endl;
+	cerr << "PSRDadaRingBuffer::get_data: nsamps=" << nsamps << " nbeams=" << nbeams << endl;
 #endif
+
+  if (nbeams > 1)
+  {
+    return get_data_block (nsamps, data);
+  }
 
   uint64_t bytes_to_read = nsamps * nchan * (nbit / 8);
   int64_t  bytes_read = 0;
@@ -231,6 +291,64 @@ size_t PSRDadaRingBuffer::get_data(size_t nsamps, char* data)
 	if (nsamps_read != nsamps)
     if (!ipcbuf_eod((ipcbuf_t*)hdu->data_block))
 		  cerr << "PSRDadaRingBuffer::get_data: returing fewer nsamps than requested!" << endl;
+
+  return nsamps_read;
+}
+
+// read a single blocks worth of data, nsamps MUST be equal to block size 
+size_t PSRDadaRingBuffer::get_data_block (size_t nsamps, char* data)
+{
+  size_t bytes_to_read = nsamps * nchan * (nbit/8);
+  uint64_t block_id, bytes_in_block;
+  unsigned ibeam;
+
+#ifdef _DEBUG
+    cerr << "PSRDadaRingBuffer::get_data_block: nsamps_requested=" << nsamps << " bytes_to_read=" << bytes_to_read << endl;
+#endif
+
+  // open block if necessary
+  if (!curr_block)
+  {
+    curr_block = ipcio_open_block_read (hdu->data_block, &bytes_in_block, &block_id);
+    if (!curr_block)
+    {
+      if (ipcbuf_eod((ipcbuf_t*)hdu->data_block))
+      {
+        cerr << "PSRDadaRingBuffer::get_data_block: EOD" << endl;
+        return 0;
+      }
+      else
+      {
+        cerr << "PSRDadaRingBuffer::get_data: ipcio_open_block_read failed" << endl;
+        return -1;
+      }
+    }
+  }
+
+#ifdef _DEBUG
+    cerr << "PSRDadaRingBuffer::get_data_block: bytes_in_block=" << bytes_in_block << endl;
+#endif
+
+  if (bytes_in_block != bytes_to_read)
+  {
+    // cerr << "PSRDadaRingBuffer::get_data: bytes avaiable in data block less than 1 full block" << endl;
+  }
+
+  memcpy ((void *) data, curr_block, bytes_in_block);
+
+  // close the data block
+  ipcio_close_block_read (hdu->data_block, bytes_in_block);
+  curr_block = 0;
+
+  uint64_t nsamps_read = bytes_in_block / (nchan * (nbit/8));
+
+  if (bytes_in_block < bytes_to_read)
+    if (!ipcbuf_eod((ipcbuf_t*)hdu->data_block))
+      cerr << "PSRDadaRingBuffer::get_data: end of data" << endl;
+
+#ifdef _DEBUG
+    cerr << "PSRDadaRingBuffer::get_data_block: nsamps_read=" << nsamps_read<< endl;
+#endif
 
   return nsamps_read;
 }

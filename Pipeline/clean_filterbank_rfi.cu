@@ -10,6 +10,7 @@
 #include "hd/get_rms.h"
 #include "hd/measure_bandpass.h"
 #include "hd/matched_filter.h"
+#include <stdio.h>
 
 #include <vector>
 #include <dedisp.h>
@@ -287,8 +288,8 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
   hd_size stride = nchans * nbits/8 / sizeof(WordType);
   
   // TODO: Any way to avoid having to use this?
-  thrust::device_vector<WordType> d_in((WordType*)h_in,
-                                       (WordType*)h_in + nsamps*stride);
+  thrust::device_vector<WordType> d_in((WordType*)h_in,(WordType*)h_in + nsamps*stride);
+  
   WordType* d_in_ptr = thrust::raw_pointer_cast(&d_in[0]);
   
   thrust::device_vector<hd_float> d_bandpass(nchans);
@@ -309,13 +310,24 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
     hd_size nsamps_smooth = hd_size(baseline_length / (1 * dt));
     for( hd_size g=0; g<nsamps; g+=nsamps_smooth ) {
       hd_size nsamps_gulp = std::min(nsamps_smooth, nsamps-g);
-      
+      std::cerr << "g=" << g << " meansure_bandpass" << std::endl;
+ 
       // Measure the bandpass
       hd_float rms = 0;
       measure_bandpass((hd_byte*)(d_in_ptr + g*stride),
                        nsamps_gulp, nchans, nbits,
                        d_bandpass_ptr, &rms);
       
+      /* try {}
+      catch(thrust::system_error &e) 
+		{
+			printf("Failed4\n");
+			exit(-1);
+		}	
+*/
+      	    
+      std::cerr << "g=" << g << " zap_narrow_rfi_functor" << std::endl;
+
       zap_narrow_rfi_functor<WordType> zapit(d_in_ptr,
                                              d_bandpass_ptr,
                                              rfi_tol*rms,

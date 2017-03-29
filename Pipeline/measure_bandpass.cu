@@ -8,6 +8,7 @@
 #include "hd/measure_bandpass.h"
 #include "hd/median_filter.h"
 #include "hd/get_rms.h"
+#include <stdio.h>
 
 // TESTING ONLY
 // #include "hd/write_time_series.h"
@@ -48,26 +49,32 @@ hd_error measure_bandpass(const hd_byte* d_filterbank,
                           hd_float*      d_bandpass,
                           hd_float*      rms)
 {
+
 	using thrust::make_counting_iterator;
 	
 	typedef unsigned int WordType;
 	hd_size stride = nchans * nbits/8 / sizeof(WordType);
-	
+	//stride=7;
+	//printf("VR says %d %d %d\n",stride,nsamps,sizeof(WordType));	
+
 	//thrust::device_vector<hd_float> d_spectrum(nchans);
 	//hd_float* d_spectrum_ptr = thrust::raw_pointer_cast(&d_spectrum[0]);
 	thrust::device_ptr<hd_float> d_bandpass_begin(d_bandpass);
 	
+  //std::cerr << "measure_bandpass 1" << std::endl;
+
 	// First we find the median of a selection of sample spectra
 	// TODO: Can/should make this a parameter?
 	// TODO: Does this give a good balance of performance vs. accuracy?
 	// Note: Changing this requires changing the code below.
 	hd_size spectrum_count = 5*5*5 *5*5;
+	
 	thrust::device_vector<hd_float> d_sample_spectra1(spectrum_count*nchans);
 	thrust::device_vector<hd_float> d_sample_spectra2(spectrum_count/5*nchans);
 	thrust::device_vector<hd_float> d_sample_spectra3(spectrum_count/5/5*nchans);
 	thrust::device_vector<hd_float> d_sample_spectra4(spectrum_count/5/5/5*nchans);
 	thrust::device_vector<hd_float> d_sample_spectra5(spectrum_count/5/5/5/5*nchans);
-	
+						
 	hd_float* d_sample_spectra1_ptr =
 		thrust::raw_pointer_cast(&d_sample_spectra1[0]);
 	hd_float* d_sample_spectra2_ptr =
@@ -78,40 +85,54 @@ hd_error measure_bandpass(const hd_byte* d_filterbank,
 		thrust::raw_pointer_cast(&d_sample_spectra4[0]);
 	hd_float* d_sample_spectra5_ptr =
 		thrust::raw_pointer_cast(&d_sample_spectra5[0]);
-	
+
 	// TODO: Make this more random?
 	hd_size seed = 123456;
 	thrust::default_random_engine rng(seed);
 	thrust::uniform_int_distribution<unsigned int> distribution(0, nsamps-1);
 	// Extract spectrum_count sample spectra from the filterbank
+
 	for( hd_size i=0; i<spectrum_count; ++i ) {
-		//hd_size t = i * spectrum_stride; // Regular spacing
+		//hd_size t = i * spectrum_stride; // Regular spacing		
 		hd_size t = distribution(rng); // Uniform random sampling
-		WordType* d_in = (WordType*)&d_filterbank[t*stride];
+		/* IN BELOW, NCHANS WAS STRIDE */
+		WordType* d_in = (WordType*)&d_filterbank[t*nchans];	 
 		thrust::transform(make_counting_iterator<unsigned int>(0),
 		                  make_counting_iterator<unsigned int>(nchans),
 		                  d_sample_spectra1.begin() + i*nchans,
 		                  unpack_functor<WordType>(d_in, nbits));
 	}
+
+
 	
+  //std::cerr << "measure_bandpass 1.1 nchans=" << nchans << " spectrum_count=" << spectrum_count << " ptr1=" << (void *) d_sample_spectra1_ptr << " ptr2=" << (void *) d_sample_spectra2_ptr << std::endl;
+
 	// Compute the 'remedian' (recursive median) of the sample spectra
 	// Note: We do this instead of a proper median for performance and simplicity
+	//std::cerr << "got here VR" << std::endl;
 	median_scrunch5_array(d_sample_spectra1_ptr, nchans,
 	                      spectrum_count,
 	                      d_sample_spectra2_ptr);
+  //std::cerr << "measure_bandpass 1.1.1" << std::endl;
 	median_scrunch5_array(d_sample_spectra2_ptr, nchans,
 	                      spectrum_count / 5,
 	                      d_sample_spectra3_ptr);
+  //std::cerr << "measure_bandpass 1.1.1" << std::endl;
 	median_scrunch5_array(d_sample_spectra3_ptr, nchans,
 	                      spectrum_count / 5 / 5,
 	                      d_sample_spectra4_ptr);
+  //std::cerr << "measure_bandpass 1.1.1" << std::endl;
 	median_scrunch5_array(d_sample_spectra4_ptr, nchans,
 	                      spectrum_count / 5 / 5 / 5,
 	                      d_sample_spectra5_ptr);
+  //std::cerr << "measure_bandpass 1.1.1" << std::endl;
 	median_scrunch5_array(d_sample_spectra5_ptr, nchans,
 	                      spectrum_count / 5 / 5 / 5 / 5,
 	                      d_bandpass);
 	
+
+  //std::cerr << "measure_bandpass 1.2" << std::endl;
+
 	//write_device_time_series(d_bandpass, nchans, 1.f, "median_spectrum.tim");
 	
 	// Now we smooth the spectrum to produce an estimate of the bandpass
@@ -170,6 +191,8 @@ hd_error measure_bandpass(const hd_byte* d_filterbank,
 		//d_sample_rms1[i] = get_rms(d_sample_spectra1_ptr + i*nchans, nchans);
 	}
 	
+  //std::cerr << "measure_bandpass 2" << std::endl;
+
 	thrust::device_vector<hd_float> d_mad(nchans);
 	hd_float* d_mad_ptr = thrust::raw_pointer_cast(&d_mad[0]);
 	
@@ -198,7 +221,7 @@ hd_error measure_bandpass(const hd_byte* d_filterbank,
 	                  _1 * 1.4826f);
 	
 	//write_device_time_series(d_mad_ptr, nchans, 1.f, "mad.tim");
-	/*
+	
 	// Smooth the band RMS
 	median_scrunch5(d_mad_ptr, nchans,
 	                d_scrunched_spectrum_ptr);
@@ -216,7 +239,7 @@ hd_error measure_bandpass(const hd_byte* d_filterbank,
 	for( hd_size i=nchans/5*5; i<nchans; ++i ) {
 		d_mad[i] = 2 * d_mad[i-1] - d_mad[i-2];
 	}
-	*/
+	
 	// TODO: Do we need to apply narrow-band filtering to (all of the)
 	//         time-scrunched versions of the filterbank too?
 	//         This would allow us to catch narrow, extended RFI.
@@ -226,12 +249,16 @@ hd_error measure_bandpass(const hd_byte* d_filterbank,
 	
 	//write_device_time_series(d_mad_ptr, nchans, 1.f, "smooth_mad.tim");
 	
+  //std::cerr << "measure_bandpass 3" << std::endl;
+
 	// Find the median RMS across the band
 	std::vector<hd_float> h_mad(nchans);
 	thrust::copy(d_mad.begin(), d_mad.end(), h_mad.begin());
 	std::nth_element(h_mad.begin(), h_mad.begin()+h_mad.size()/2, h_mad.end());
 	*rms = h_mad[h_mad.size()/2];
 	
+  //std::cerr << "measure_bandpass 4" << std::endl;
+
 	/*
 	// And finally use the remedian to estimate the global RMS
 	median_scrunch5(d_sample_rms1_ptr, spectrum_count,

@@ -5,47 +5,60 @@
 #  * listen on socket
 #  * return plots as binary data over socket 
 
-import Dada, Bpsr, threading, sys, time, socket, select, signal, traceback
+import Dada, threading, sys, time, socket, select, signal, traceback
 import time, numpy, math, os, fnmatch, tempfile, Gnuplot, datetime
 import trans_paths
 
-DL = 0
+DL = 1
+TSAMP = 0.00032768
 
 ###########################################################################
 
-def plotCandDspsr(fil_file, sample, filter, dm):
+def plotCandDspsr (fil_file, sample, filter, dm, beam, snr):
 
-  cand_time = (0.000064 * sample)
-  cmd = "dmsmear -f 1382 -b 400 -n 1024 -d " + str(dm) + " -q 2>&1 "
+  cand_time = (TSAMP * sample)
+  cmd = "dmsmear -f 835 -b 31.25 -n 320 -d " + str(dm) + " -q 2>&1 "
+  Dada.logMsg(2, DL, "plotCandDspsr: " + str(cmd))
   p = os.popen(cmd)
   cand_band_smear = p.readline().strip()
   p.close()
-  Dada.logMsg(1, DL, "plotCandDspsr: cand_band_smear='" + cand_band_smear + "'")
+  Dada.logMsg(2, DL, "plotCandDspsr: cand_band_smear='" + cand_band_smear + "'")
 
-  cand_filter_time = (2 ** filter) * 0.000064
+  cand_filter_time = (2 ** filter) * TSAMP
 
   cand_smearing = float(cand_band_smear) + float(cand_filter_time)
 
-  cand_start_time = cand_time - (1.0 * cand_smearing)
+  cand_start_time = cand_time - (2.0 * cand_smearing)
+  cand_tot_time   = 5.0 * cand_smearing
+  #cand_start_time = cand_time
+  #cand_tot_time   = cand_smearing
 
-  cand_tot_time   = 2.0 * cand_smearing
+  Dada.logMsg(2, DL, "plotCandDspsr: cand_time=" + str(cand_time) + " cand_start_time=" + str(cand_start_time))
 
-  cmd = "dspsr " + fil_file + " -S " + str(cand_start_time) + \
-        " -b 128" + \
+  bin_width = TSAMP * ( 2 ** filter)
+  nbin = int (cand_tot_time / bin_width)
+
+  if nbin < 64:
+    nbin = 64
+
+  cmd = "/home/dada/tmpaj/linux_64/bin/dspsr -q " + fil_file + " -S " + str(cand_start_time) + \
+        " -b " + str(nbin) + \
         " -T " + str(cand_tot_time) + \
         " -c " + str(cand_tot_time) + \
         " -D " + str(dm) + \
-        " -U 8" + \
-        " 2>&1 | grep unloading | awk '{print $NF}'"
+        " -U 0.01" + \
+        " -cepoch=start" + \
+        " |& grep unloading | awk '{print $NF}'"
 
   # create a temporary working directory
   workdir = tempfile.mkdtemp()
 
   os.chdir(workdir)
 
-  Dada.logMsg(1, DL, "plotCandDspsr: " + cmd)
+  Dada.logMsg(2, DL, "plotCandDspsr: " + cmd)
   p = os.popen(cmd)
   response = p.readline().strip()
+  Dada.logMsg(3, DL, "plotCandDspsr: response=" + response)
   p.close()
 
   archive = response + ".ar"
@@ -57,9 +70,17 @@ def plotCandDspsr(fil_file, sample, filter, dm):
 
   binary_data = []
 
-  title = "DM=" + str(dm) + " Length=" + str(cand_filter_time*1000) + "ms Epoch=" + str(cand_start_time)
-  cmd = "psrplot -c above:l='" + title + "' -j 'zap chan 0-160' -j 'F 128' -c x:unit=ms -p freq+ ./" + archive + " -D -/PNG";
-  Dada.logMsg(1, DL, "plotCandDspsr: " + cmd)
+  width = "{0:.2f}".format(round(cand_filter_time*1000,2))
+  title = beam + "  DM " + str(dm) + "  Width " + width + "ms"
+
+  nchan = int(round(math.pow(float(snr)/4.0,2)))
+  if nchan < 80:
+    nchan = 80 
+  if  nchan > 512:
+    nchan = 512
+
+  cmd = "psrplot -c flux:below:l='' -c above:l='" + title + "' -c x:unit=ms -p freq+ ./" + archive + " -j 'F " + str(nchan) + "' -x -D -/PNG";
+  Dada.logMsg(2, DL, "plotCandDspsr: " + cmd)
   p = os.popen(cmd)
   binary_data = p.read()
   p.close()
@@ -71,7 +92,7 @@ def plotCandDspsr(fil_file, sample, filter, dm):
 
   return binary_data
 
-def plotCandidate(fil_file, sample, filter, dm):
+def plotCandidate(fil_file, sample, filter, dm, beam):
 
   verbose = False
   res_x = '800'
@@ -192,12 +213,13 @@ if __name__ == "__main__":
   import argparse
   import Gnuplot
 
-
   parser = argparse.ArgumentParser(description="Plot a transient event to stdout")
   parser.add_argument("fil_file", help="filterbank file to process")
   parser.add_argument("sample", help="sample number of event start", type=int)
   parser.add_argument("dm", help="dm of event", type=float)
   parser.add_argument("filter", help="filter of event", type=int)
+  parser.add_argument("snr", help="snr of event", type=float)
+  parser.add_argument('-beam', help="name of beam", type=str)
 
   parser.add_argument('-verbose', action="store_true")
   args = parser.parse_args()
@@ -207,6 +229,8 @@ if __name__ == "__main__":
   dm = args.dm
   filter = args.filter
   verbose = args.verbose
+  beam = args.beam
+  snr = args.snr
 
   if not os.path.exists(fil_file):
     sys.exit('ERROR: Filterbank file %s was not found!' % fil_file)
@@ -228,13 +252,13 @@ if __name__ == "__main__":
 
     if (proc_type == "dspsr"):
       Dada.logMsg(2, DL, "main: plotCandDspsr()")
-      binary_data = plotCandDspsr(fil_file, sample, filter, dm)
+      binary_data = plotCandDspsr(fil_file, sample, filter, dm, beam, snr)
       binary_len = len(binary_data)
       Dada.logMsg(3, DL, "main: sending binary data len="+str(binary_len))
 
     else:
       Dada.logMsg(2, DL, "main: plotCandidate()")
-      binary_data = plotCandidate(fil_file, sample, filter, dm)
+      binary_data = plotCandidate(fil_file, sample, filter, dm, beam)
       binary_len = len(binary_data)
       Dada.logMsg(3, DL, "main: sending binary data len="+str(binary_len))
 

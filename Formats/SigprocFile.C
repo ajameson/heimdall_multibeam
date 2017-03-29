@@ -35,6 +35,7 @@ SigprocFile::SigprocFile (const char* filename)
   nchan = m_header.nchans;
   nbit  = m_header.nbits;
   beam  = m_header.ibeam;
+  nbeams = m_header.nbeams; // VR_add number of beams
   tsamp = m_header.tsamp;  // in seconds
   spectra_rate = 1 / tsamp;
 

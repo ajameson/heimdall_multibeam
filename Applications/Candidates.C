@@ -22,10 +22,10 @@ using namespace std;
 Candidate::Candidate ()
 {
   snr = sample_idx = sample_time = filter = dm_trial = dm = members = 0;
-  begin = end = nbeams = beam_mask = primary_beam = max_snr = 0;
+  begin = end = nbeams = primary_beam = max_snr = 0;
 }
 
-Candidate::Candidate (const char * line, unsigned _beam_number)
+Candidate::Candidate (const char * line)
 {
   istringstream iss (line, istringstream::in);
   iss >> snr;
@@ -37,13 +37,13 @@ Candidate::Candidate (const char * line, unsigned _beam_number)
   iss >> members;
   iss >> begin;
   iss >> end;
+  iss >> beam;
 
   nbeams = 1;
-  beam_mask = 1 << (_beam_number-1);
-  primary_beam = _beam_number;
-  beam = _beam_number;
-  max_snr = snr;
 
+  primary_beam = beam;
+  max_snr = snr;
+  
   iss >> ws;
 
   if (!iss.eof())
@@ -58,15 +58,15 @@ Candidate::~Candidate ()
 void Candidate::header()
 {
   cout << "SNR\tsamp_idx\ttime\tfilter\tdm_trial\tDM\tmembers\tbegin\t";
-  cout << "end\tnbeams\tbeam_mask\tprim_beam\tmax_snr\tbeam" << endl;
+  cout << "end\tnbeams\ttprim_beam\tmax_snr\tbeam" << endl;
 }
 
-bool Candidate::is_coincident(const Candidate * c)
+bool Candidate::is_coincident(const Candidate * c, const unsigned sep_time, const unsigned sep_filter)
 {
-  const int64_t sep_time = 3;
-  const uint64_t sep_filter = 4;
+  //const int64_t sep_time = 3;
+  //const uint64_t sep_filter = 4;
   const uint64_t sep_dm = 9999;
-  const float    sep_snr = 0.30;
+  const float    sep_snr = 0.1;
   const int64_t tol = sep_time * powf(2,max(c->filter,filter));
 
   // change temporal coincidence on bens suggestion 6/8/2012
@@ -80,7 +80,7 @@ std::ostream& operator<<(std::ostream& os, const Candidate * c) {
   os << c->snr << "\t" << c->sample_idx << "\t" << c->sample_time << "\t"
      << c->filter << "\t" << c->dm_trial << "\t" << c->dm  << "\t"
      << c->members << "\t" << c->begin << "\t" << c->end << "\t"
-     << c->nbeams << "\t" << c->beam_mask << "\t" << c->primary_beam << "\t"
+     << c->nbeams << "\t" << "\t" << c->primary_beam << "\t"
      << c->max_snr <<"\t" << c->beam;
   return os;
 }
@@ -89,31 +89,51 @@ CandidateChunk::CandidateChunk () {
   first_sample = 0;
   resize(0);
   verbose = 0;
+  configured = false;
+  nbeam = 0;
+  nbeam_size = 0;
 }
 
-CandidateChunk::CandidateChunk(int argc, int optind, char ** argv)
+CandidateChunk::CandidateChunk (unsigned nbeams)
 {
+  verbose = 0;
+  nbeam = 0;
+  nbeam_size = 0;
   // resize internal storage
-  resize (argc - optind);
+  resize (nbeams);
+  configured = false;
+}
+
+
+CandidateChunk::CandidateChunk(unsigned nbeams, int argc, int optind, char ** argv)
+{
+  nbeam = nbeams;
+  nbeam_size = 0;
+
+  // resize internal storage
+  resize (nbeams);
+  verbose = 0;
+
+  int nfiles = argc - optind;
 
   char line[1024];
   string beam;
-  int beam_number = 0;
 
-  for (unsigned int i=0; i < n_beams; i++)
+  // parse the date/time stamp from the first file
+  if (nfiles > 0)
+  {
+    char * first_file = strdup (argv[optind]);
+    char * pch;
+    pch = strtok (first_file, "_");
+    if (pch != NULL)
+      setFirstSampleUTC(pch);
+  }
+    
+  for (int i=0; i<nfiles; i++)
   {
     if (verbose)
       cerr << "CandidateChunk::CandidateChunk opening file " << argv[optind+i] << endl;
 
-    // determine beam number from filename
-    stringstream ss(basename(argv[optind+i]));
-    getline(ss, first_sample_utc, '_');  // candidates
-    getline(ss, beam, '.');    // beam number
-    beam_number = atoi(beam.c_str());
-    beam_numbers[i] = beam_number;
-
-    if (verbose)
-      cerr << "CandidateChunk::CandidateChunk parsed beam number as " << beam << endl;
 
     std::ifstream ifs (argv[optind+i], std::ios::in);
     while (ifs.good())
@@ -121,17 +141,21 @@ CandidateChunk::CandidateChunk(int argc, int optind, char ** argv)
       ifs.getline(line, 1024, '\n');
       if (!ifs.eof())
       {
-        cands[i].push_back( new Candidate(line, beam_number));
+        if (verbose)
+          cerr << "Adding candidate from " << line << endl;
+        Candidate * cand = new Candidate(line);
+        cands[(cand->beam-1)].push_back (cand);
       }
     }
   }
+  configured = true;
 }
 
 CandidateChunk::~CandidateChunk ()
 {
   if (verbose)
     cerr << "CandidateChunk::~CandidateChunk" << endl;
-  for (unsigned i=0; i<n_beams; i++)
+  for (unsigned i=0; i<nbeam_size; i++)
   {
     for (unsigned j=0; j<cands[i].size(); j++)
       delete cands[i][j];
@@ -140,18 +164,22 @@ CandidateChunk::~CandidateChunk ()
   cands.erase(cands.begin(), cands.end());
 }
 
+void CandidateChunk::setFirstSampleUTC (const char * str)
+{
+  first_sample_utc.assign (str);
+}
+
 // add beam
-int CandidateChunk::addBeam (string _utc_start, string _first_sample_utc, 
-                             uint64_t _first_sample, unsigned int beam, 
+int CandidateChunk::addBeam (string _utc_start, string _first_sample_utc,
+                             uint64_t _first_sample, unsigned int nbeams,
                              uint64_t num_events, std::istringstream& ss)
 {
-  unsigned int ibeam = n_beams;
-
-  if (n_beams == 0)
+  if (!configured)
   {
     first_sample = _first_sample;
     first_sample_utc = _first_sample_utc;
     utc_start = _utc_start;
+    configured = true;
   }
   else
   {
@@ -160,80 +188,96 @@ int CandidateChunk::addBeam (string _utc_start, string _first_sample_utc,
     if (utc_start != _utc_start)
       cerr << "CandidateChunk::addBeam utc_start mismatch" << endl;
   }
-
-  // resize storage for this new beam
-  resize(n_beams + 1);
-  beam_numbers[ibeam] = beam;
+ 
+  // increment the number of beams integrated into this chunk
+  nbeam += nbeams;
 
   if (verbose > 1)
-    cerr << "CandidateChunk::addBeam resized to " << n_beams << " beams with beam " << beam << endl;
+    cerr << "CandidateChunk::addBeam adding " << nbeams << " containing " << num_events << " to chunk" << endl;
 
   char cand_line[1024];
-  cands[ibeam].resize(num_events);
   for (unsigned ievent=0; ievent < num_events; ievent++)
   {
-    ss.getline(cand_line, 1024, '\n');
-    cands[ibeam][ievent] = new Candidate(cand_line, beam);
-    //cerr << "cands[" << ibeam << "][" << ievent << "]=" << cands[ibeam][ievent] << endl;
-    //Candidate c(cand_line, beam);
-    //cands[ibeam].push_back(c);
+    // read a line from the ss
+    ss.getline (cand_line, 1024, '\n');
+    if ((!ss.eof()) && strlen(cand_line) > 10)
+    {
+      // build a candiate
+      Candidate * cand = new Candidate(cand_line);
+      // determine beam of this candidate
+      int ibeam = cand->beam - 1;
+      if (ibeam >= 0 && ibeam < nbeam_size)
+      {
+        if (verbose > 1)
+          cerr << "cands[" << ibeam <<"].push_back (" << cand << ") [" << ievent << "]" << endl;
+        // append the candidate to the right beam
+        cands[ibeam].push_back (cand);
+      }
+    }
   }
 }
 
-void CandidateChunk::resize (unsigned _n_beams)
+void CandidateChunk::resize (unsigned nbeams)
 {
-  n_beams = _n_beams;
-  cands.resize(_n_beams);
-  beam_numbers.resize(_n_beams);
+  nbeam_size = nbeams;
+  cands.resize(nbeam_size);
 }
 
-unsigned int CandidateChunk::get_n_beams() const
-{ 
-  return n_beams;
+unsigned int CandidateChunk::get_nbeam_size() const
+{
+  return nbeam_size;  
 }
 
-void CandidateChunk::compute_coincidence()
+unsigned int CandidateChunk::get_nbeam() const
+{
+  return nbeam;
+}
+
+void CandidateChunk::compute_coincidence (unsigned sep_time, unsigned sep_filter)
 {
   float max_snr_j;
   float snr_l;
   unsigned i, j, k, l;
 
   unsigned int members_tol = 3;
-  unsigned int rfi_mask = 1 << 16;
-  unsigned int beam_thresh = 2;
 
-  // compute coincidence information
-  for (i=0; i < n_beams; i++)
+  if (verbose)
+    cerr << "CandidateChunk::compute_coincidence nbeams=" << nbeam_size
+         << " cands.size()=" << cands.size() << endl;
+
+  // compute coincidence information for beam [i]
+  for (i=0; i < cands.size(); i++)
   {
+    if (verbose)
+      cerr << "compute_coincidence assessing " << cands[i].size() << " candidates from beam " << i << " of " << nbeam << endl;
     for (j=0; j<cands[i].size(); j++)
     {
       max_snr_j = cands[i][j]->snr;
 
-      if (cands[i][j]->members < members_tol)
-        continue;
+      // narrow, 0 DM stuff has very few members
+      //if (cands[i][j]->members < members_tol && cands[i][j]->dm_trial > 0)
+      //  continue;
 
-      for (k=0; k < n_beams; k++)
+      // compare canidiate [i][j] vs every other candidate
+      for (k=0; k<cands.size(); k++)
       {
+        // exclude self comparison of beams
         if (i != k)
         {
           for (l=0; l<cands[k].size(); l++)
           {
             snr_l = cands[k][l]->snr;
 
-            if (cands[k][l]->members < members_tol)
-              continue;
+            //if (cands[k][l]->members < members_tol && cands[i][j]->dm_trial > 0)
+            //  continue;
 
-            if ( cands[i][j]->is_coincident (cands[k][l]) )
+            if ( cands[i][j]->is_coincident (cands[k][l], sep_time, sep_filter ) )
             {
               cands[i][j]->nbeams ++;
-              cands[i][j]->beam_mask |= 1 <<  k;
-
-              if (cands[i][j]->nbeams >= beam_thresh + 1)
-                cands[i][j]->beam_mask |= rfi_mask;
 
               if (snr_l > max_snr_j)
               {
-                cands[i][j]->primary_beam = beam_numbers[k];
+                cands[i][j]->primary_beam = cands[k][l]->beam;
                 cands[i][j]->max_snr = snr_l;
                 max_snr_j = snr_l;
               }
@@ -267,9 +311,13 @@ void CandidateChunk::write_coincident_candidates()
   if (verbose)
     cerr << "CandidateChunk::write_coincident_candidates: output_file=" << filename->c_str() << endl;
 
-  for (unsigned i=0; i< n_beams; i++)
+  for (unsigned i=0; i<cands.size(); i++)
+  {
     for (unsigned j=0; j<cands[i].size(); j++)
+    {
       ofs << cands[i][j] << endl;
+    }
+  }
   ofs.close();
 }
 
