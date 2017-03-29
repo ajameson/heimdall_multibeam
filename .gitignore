@@ -10,6 +10,8 @@ Applications/heimdall
 Applications/coincidencer
 Applications/coincidencer_client
 Applications/candidate_profiler
+Applications/fil2pgm
+Applications/generate_dmlist
 Applications/Makefile
 Formats/Makefile
 Network/Makefile
@@ -17,11 +19,14 @@ Pipeline/Makefile
 Scripts/Makefile
 Scripts/trans_paths.py
 Scripts/trans_paths.pyc
+bin/
 config.guess
 config.status
 config.sub
 configure
+include/
 ltmain.sh
+lib/
 libtool
 stamp-h1
 aclocal.m4
