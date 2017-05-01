@@ -23,6 +23,7 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/iterator/discard_iterator.h>
 
+#include <thrust/iterator/retag.h>
 
 // Global instance of the custom temporary memory allocator for Thrust
 // TODO: We should be calling g_allocator.free_all() somewhere at the end of
