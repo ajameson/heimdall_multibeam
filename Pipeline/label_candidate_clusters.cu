@@ -18,7 +18,6 @@
 #include <thrust/binary_search.h>
 #include <thrust/count.h>
 
-//#define AJTEST
 /*
 // Lexicographically projects 3D integer coordinates onto a 1D coordinate
 // Also applies an offset and performs boundary clamping
@@ -146,9 +145,6 @@ struct cluster_functor {
 	const hd_size* d_ends;
 	const hd_size* d_filters;
 	const hd_size* d_dms;
-#ifdef AJTEST
-	const hd_float* d_peaks;
-#endif
 	hd_size* d_labels;
 	hd_size  time_tol;
 	hd_size  filter_tol;
@@ -159,9 +155,6 @@ struct cluster_functor {
 	                const hd_size* d_samp_inds_,
 	                const hd_size* d_begins_, const hd_size* d_ends_,
 	                const hd_size* d_filters_, const hd_size* d_dms_,
-#ifdef AJTEST
-                  const hd_float* d_peaks_,
-#endif
 	                hd_size* d_labels_,
 	                hd_size time_tol_, hd_size filter_tol_, hd_size dm_tol_,
                   hd_size nsamps_beam_)
@@ -169,9 +162,6 @@ struct cluster_functor {
 		  d_samp_inds(d_samp_inds_),
 		  d_begins(d_begins_), d_ends(d_ends_),
 		  d_filters(d_filters_), d_dms(d_dms_),
-#ifdef AJTEST
-		  d_peaks(d_peaks_),
-#endif
 		  d_labels(d_labels_),
 		  time_tol(time_tol_),
       filter_tol(filter_tol_),
@@ -182,10 +172,9 @@ struct cluster_functor {
 	void operator()(unsigned int i) {
 		hd_size samp_i   = d_samp_inds[i];
 		hd_size beam_i   = d_samp_inds[i] / nsamps_beam;
-		hd_size begin_i  = d_begins[i];
-		hd_size end_i    = d_ends[i];
 		hd_size filter_i = d_filters[i];
 		hd_size dm_i     = d_dms[i];
+
 		// TODO: This would be much faster using shared mem like in nbody
 		for( unsigned int j=0; j<count; ++j ) {
 			if( j == i ) {
@@ -193,24 +182,15 @@ struct cluster_functor {
 			}
 			hd_size samp_j   = d_samp_inds[j];
 			hd_size beam_j   = d_samp_inds[j] / nsamps_beam;
-			hd_size begin_j  = d_begins[j];
-			hd_size end_j    = d_ends[j];
 			hd_size filter_j = d_filters[j];
 			hd_size dm_j     = d_dms[j];
-			if( are_coincident(samp_i, samp_j,
-                         beam_i, beam_j,
-			                   begin_i, begin_j,
-			                   end_i, end_j,
-			                   filter_i, filter_j,
-			                   dm_i, dm_j,
-			                   time_tol, filter_tol, dm_tol) ) {
-#ifdef AJTEST
-        if (d_peaks[i] < d_peaks[j])
-				  d_labels[i] = d_labels[j];
-#else
+			if( are_coincident_beam(samp_i, samp_j,
+                              beam_i, beam_j,
+                              filter_i, filter_j,
+                              dm_i, dm_j,
+                              time_tol, filter_tol, dm_tol) ) {
 				// Re-label as the minimum of the two
 				d_labels[i] = min((int)d_labels[i], (int)d_labels[j]);
-#endif
 			}
 		}
 	}
@@ -260,9 +240,6 @@ hd_error label_candidate_clusters(hd_size            count,
 	                                 d_cands.ends,
 	                                 d_cands.filter_inds,
 	                                 d_cands.dm_inds,
-#ifdef AJTEST
-	                                 d_cands.peaks,
-#endif
 	                                 d_labels,
 	                                 time_tol,
 	                                 filter_tol,

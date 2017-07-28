@@ -43,12 +43,19 @@ hd_error median_scrunch3_array(const hd_float* d_in,
                                hd_size         count,
                                hd_float*       d_out);
 
-// Median-scrunches the corresponding elements from a collection of arrays
+// Median-scrunches the corresponding elements from a collection of arrays [TS]
 // Note: This cannot (currently) handle count not being a multiple of 5
 hd_error median_scrunch5_array(const hd_float* d_in,
                                hd_size         array_size,
                                hd_size         count,
                                hd_float*       d_out);
+// Median-scrunches the corresponding elements from a collection of beams [ST] 
+// Note: This cannot (currently) handle count not being a multiple of 5
+hd_error median_scrunch5_beam(const hd_float* d_in,
+                              hd_size         nbeam,
+                              hd_size         count,
+                              hd_float*       d_out);
+
 
 // Mean-scrunches the corresponding elements from a collection of arrays
 // Note: This cannot (currently) handle count not being a multiple of 2

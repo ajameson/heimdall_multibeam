@@ -191,6 +191,50 @@ struct median_scrunch5_array_kernel
 	}
 };
 
+struct median_scrunch5_beam_kernel
+  : public thrust::unary_function<hd_float,hd_float> {
+  const hd_float* in;
+  const hd_size   in_size;
+  const hd_size   out_size;
+  median_scrunch5_beam_kernel(const hd_float* in_, hd_size in_size_, hd_size out_size_)
+    : in(in_), in_size(in_size_), out_size(out_size_) {}
+  inline __host__ __device__
+  hd_float operator()(unsigned int o) const {
+    // o is (output_sample * nbeam)
+    hd_size beam = o / out_size; 
+    // i is input sample
+    hd_size i = (o % out_size) * 5;
+    hd_size offset = (beam * in_size) + i;
+    hd_float a = in[offset+0];
+    hd_float b = in[offset+1];
+    hd_float c = in[offset+2];
+    hd_float d = in[offset+3];
+    hd_float e = in[offset+4];
+    return median5(a, b, c, d, e);
+  }
+};
+
+struct median_beam_kernel
+  : public thrust::unary_function<hd_float,hd_float> {
+  const hd_float* in;
+  const hd_size   size;
+  median_beam_kernel(const hd_float* in_, hd_size size_)
+    : in(in_), size(size_) {}
+  inline __host__ __device__
+  hd_float operator()(unsigned int o) const {
+    hd_size offset = (o * size);
+    if (size == 1)
+      return in[offset+0];
+    else if (size == 2)
+      return 0.5f*(in[offset+0] + in[offset+1]);
+    else if (size == 3)
+      return median3 (in[offset+0], in[offset+1], in[offset+2]);
+    else 
+      return median4 (in[offset+0], in[offset+1], in[offset+2], in[offset+3]);
+  }
+};
+
+
 hd_error median_filter3(const hd_float* d_in,
                         hd_size         count,
                         hd_float*       d_out)
@@ -315,6 +359,41 @@ hd_error median_scrunch5_array(const hd_float* d_in,
 	                  median_scrunch5_array_kernel(d_in, array_size));
 	return HD_NO_ERROR;
 }
+
+// Median-scrunches the corresponding elements from a collection of arrays
+// Note: This cannot (currently) handle count not being a multiple of 5
+hd_error median_scrunch5_beam(const hd_float* d_in,
+                              hd_size         beam_stride,
+                              hd_size         nbeam,
+                              hd_float*       d_out)
+{
+  thrust::device_ptr<hd_float> d_out_begin(d_out);
+ 
+  if (beam_stride > 4)
+  {
+    // Note: Truncating here is necessary
+    hd_size out_count = beam_stride / 5;
+    hd_size total     = nbeam * out_count;
+    //std::cout << "median_scrunch5_beam beam_stride=" << beam_stride << " out_count=" << out_count << " total=" << total << std::endl;
+    using thrust::make_counting_iterator;
+    thrust::transform(make_counting_iterator<unsigned int>(0),
+                      make_counting_iterator<unsigned int>(total),
+                      d_out_begin,
+                      median_scrunch5_beam_kernel(d_in, beam_stride, out_count));
+  }
+  else
+  {
+    using thrust::make_counting_iterator;
+    thrust::transform(make_counting_iterator<unsigned int>(0),
+                      make_counting_iterator<unsigned int>(nbeam),
+                      d_out_begin,
+                      median_beam_kernel(d_in, beam_stride));
+
+  }
+
+  return HD_NO_ERROR;
+}
+
 
 template<typename T>
 struct mean2_functor : public thrust::binary_function<T,T,T> {

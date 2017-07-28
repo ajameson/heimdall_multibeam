@@ -5,10 +5,13 @@
  *
  ***************************************************************************/
 
+#pragma once
+
 #include <vector>
 #include <string>
 using std::string;
 #include <fstream>
+#include <stdexcept>
 
 namespace detail {
 // TODO: These were copied from header.hpp. Not sure if this is a good idea.

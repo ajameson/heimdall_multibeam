@@ -42,3 +42,28 @@ bool are_coincident(hd_size samp_i, hd_size samp_j,
 		abs((int)filter_j - (int)filter_i) <= filter_tol &&
 		abs((int)dm_j - (int)dm_i ) <= dm_tol;
 }
+
+inline __host__ __device__
+bool are_coincident_beam(hd_size samp_i, hd_size samp_j,
+                    hd_size beam_i, hd_size beam_j,
+                    hd_size filter_i, hd_size filter_j,
+                    hd_size dm_i, hd_size dm_j,
+                    hd_size time_tol, hd_size filter_tol, hd_size dm_tol) {
+
+  // TODO: Should time_tol be adjusted for the filtering level(s)?
+  //         Sarah's giantsearch doesn't seem to use any tol at all.
+
+  // TODO: TESTING tolerance proportional to filter width
+  //time_tol *= ((1<<filter_i) + (1<<filter_j)) / 2;
+  time_tol *= max((int)(1<<filter_i), (int)(1<<filter_j));
+
+  // TODO: Avoid the (int) casts?
+  //return ranges_overlap(begin_i, end_i, begin_j, end_j, time_tol) &&
+  //  abs((int)filter_j - (int)filter_i) <= filter_tol &&
+  //  abs((int)dm_j - (int)dm_i ) <= dm_tol;
+  return beam_i == beam_j &&
+    abs((int)samp_j-(int)samp_i) <= time_tol &&
+    abs((int)filter_j - (int)filter_i) <= filter_tol &&
+    abs((int)dm_j - (int)dm_i ) <= dm_tol;
+}
+

@@ -262,7 +262,8 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
                               hd_float       baseline_length,
                               hd_float       rfi_tol,
                               hd_size        rfi_min_beams,
-                              hd_size        boxcar_max)
+                              hd_size        boxcar_max,
+                              hd_size        nbeams)
 {
   using thrust::counting_iterator;
   
@@ -297,7 +298,7 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
   
   // Narrow-band RFI is not an issue when nbits is small
   // Note: Small nbits can actually cause this excision code to fail
-  if( nbits > 4 ) {
+  if( nbits > 4 && false) {
     // Narrow-band RFI excision
     // ------------------------
     // TODO: Any motivation for this?
@@ -372,7 +373,10 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
     return throw_dedisp_error(derror);
   }
   hd_size max_delay       = dedisp_get_max_delay(plan);
+
+  hd_size beam_stride     = nsamps / nbeams;
   hd_size nsamps_computed = nsamps - max_delay;
+  hd_size beam_nsamps     = beam_stride - max_delay;
   
   h_raw_series.resize(nsamps_computed);
   
@@ -403,7 +407,7 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
   //                         dt, "dm0_dedispersed.tim");
   
   RemoveBaselinePlan baseline_remover;
-  error = baseline_remover.exec(d_series_ptr, nsamps_computed, nsamps_smooth);
+  error = baseline_remover.exec(d_series_ptr, beam_stride, beam_nsamps, nsamps_smooth, nbeams);
   if( error != HD_NO_ERROR ) {
     return throw_error(error);
   }

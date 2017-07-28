@@ -22,7 +22,8 @@ hd_error clean_filterbank_rfi(dedisp_plan    plan,
                               hd_float       baseline_length,
                               hd_float       rfi_tol,
                               hd_size        rfi_min_beams,
-                              hd_size        boxcar_max);
+                              hd_size        boxcar_max,
+                              hd_size        nbeams);
 
 hd_error apply_manual_killmasks (dedisp_plan    main_plan,
                                  int*           h_killmask,

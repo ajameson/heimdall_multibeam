@@ -42,6 +42,23 @@ struct greater_than_val : public thrust::unary_function<T, bool> {
   }
 };
 
+
+typedef thrust::tuple<hd_float, hd_size> tplfloatint;
+struct greater_than_val_mb : public thrust::unary_function<tplfloatint, bool> {
+  hd_float  val;
+  const hd_size   stride;
+  const hd_size   count;
+  greater_than_val_mb(hd_float val_, hd_size stride_, hd_size count_) 
+    : val(val_), stride(stride_), count(count_) {}
+  inline __host__ __device__
+  bool operator()(const tplfloatint& x) const {
+    hd_size i = thrust::get<1>(x);
+    hd_size samp = i % stride;
+    hd_float samp_val = thrust::get<0>(x);
+    return (samp < count && samp_val > val);
+  }
+};
+
 template<typename T>
 struct maximum_first : public thrust::binary_function<T,T,T> {
   inline __host__ __device__
@@ -81,12 +98,14 @@ class GiantFinder_impl {
   thrust::device_vector<int>      d_giant_data_segments;
   thrust::device_vector<hd_size>  d_giant_data_seg_ids;
 public:
-  hd_error exec(const hd_float* d_data, hd_size count,
+  hd_error exec(const hd_float* d_data, hd_size count, hd_size nbeams,
                 hd_float thresh, hd_size merge_dist,
+                hd_size beam_stride, hd_size beam_count,
                 thrust::device_vector<hd_float>& d_giant_peaks,
                 thrust::device_vector<hd_size>&  d_giant_inds,
                 thrust::device_vector<hd_size>&  d_giant_begins,
                 thrust::device_vector<hd_size>&  d_giant_ends) {
+
     // This algorithm works by extracting all samples in the time series
     //   above thresh (the giant_data), segmenting those samples into
     //   isolated giants (based on merge_dist), and then computing the
@@ -99,10 +118,9 @@ public:
     using thrust::make_counting_iterator;
   
     typedef thrust::device_ptr<const hd_float> const_float_ptr;
-    //typedef thrust::system::cuda::pointer<const hd_float> const_float_ptr;
     typedef thrust::device_ptr<hd_float>             float_ptr;
     typedef thrust::device_ptr<hd_size>              size_ptr;
-  
+ 
     const_float_ptr d_data_begin(d_data);
     const_float_ptr d_data_end(d_data + count);
   
@@ -111,16 +129,17 @@ public:
   
     timer.start();
 #endif
-  
+ 
     // Note: The calls to Thrust in this function are retagged to use a
     //         custom temporary memory allocator (cached_allocator.cuh).
     //       This turns out to be critical to performance!
-    
     // Quickly count how much giant data there is so we know the space needed
-    hd_size giant_data_count = thrust::count_if(thrust::retag<my_tag>(d_data_begin),
-                                                thrust::retag<my_tag>(d_data_end),
-                                                greater_than_val<hd_float>(thresh));
-    //std::cout << "GIANT_DATA_COUNT = " << giant_data_count << std::endl;
+    hd_size giant_data_count = 
+        thrust::count_if(
+            make_zip_iterator(make_tuple(thrust::retag<my_tag>(d_data_begin), make_counting_iterator(0u))),
+            make_zip_iterator(make_tuple(thrust::retag<my_tag>(d_data_begin), make_counting_iterator(0u)))+count,
+            greater_than_val_mb(thresh, beam_stride, beam_count));
+
     // We can bail early if there are no giants at all
     if( 0 == giant_data_count ) {
       //std::cout << "**** Found ZERO giants" << std::endl;
@@ -155,10 +174,11 @@ public:
                                            make_counting_iterator(0u))),
               make_zip_iterator(make_tuple(thrust::retag<my_tag>(d_data_begin),
                                            make_counting_iterator(0u)))+count,
-              (d_data_begin), // the stencil
+              make_zip_iterator(make_tuple(thrust::retag<my_tag>(d_data_begin),
+                                           make_counting_iterator(0u))),
               make_zip_iterator(make_tuple(thrust::retag<my_tag>(d_giant_data.begin()),
                                            thrust::retag<my_tag>(d_giant_data_inds.begin()))),
-              greater_than_val<hd_float>(thresh))
+              greater_than_val_mb(thresh, beam_stride, beam_count))
       - make_zip_iterator(make_tuple(thrust::retag<my_tag>(d_giant_data.begin()),
                                      thrust::retag<my_tag>(d_giant_data_inds.begin())));
   
@@ -300,14 +320,16 @@ public:
 // Public interface (wrapper for implementation)
 GiantFinder::GiantFinder()
   : m_impl(new GiantFinder_impl) {}
-hd_error GiantFinder::exec(const hd_float* d_data, hd_size count,
+hd_error GiantFinder::exec(const hd_float* d_data, hd_size count, hd_size nbeams,
                            hd_float thresh, hd_size merge_dist,
+                           hd_size beam_stride, hd_size beam_count,
                            thrust::device_vector<hd_float>& d_giant_peaks,
                            thrust::device_vector<hd_size>&  d_giant_inds,
                            thrust::device_vector<hd_size>&  d_giant_begins,
                            thrust::device_vector<hd_size>&  d_giant_ends) {
-  return m_impl->exec(d_data, count,
+  return m_impl->exec(d_data, count, nbeams,
                       thresh, merge_dist,
+                      beam_stride, beam_count,
                       d_giant_peaks,
                       d_giant_inds,
                       d_giant_begins,
