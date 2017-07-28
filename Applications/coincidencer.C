@@ -103,8 +103,8 @@ int main(int argc, char* argv[])
         break;
 
       case 'v':
-         verbose ++;
-         break;
+        verbose ++;
+        break;
 
       default:
         usage();
@@ -119,6 +119,11 @@ int main(int argc, char* argv[])
 
   if (port > 0)
     server = new ServerSocket( (char *) address, port );
+
+  std::string server_hostname = server->get_hostname();
+  std::string server_service = server->get_service();
+  //if (verbose)
+    cerr << "Listening for connections on " << server_hostname << ":" << server_service << endl;
 
   while ( continue_processing )
   {
@@ -152,7 +157,7 @@ int main(int argc, char* argv[])
 
       while ( waiting_for_beams )
       {
-        if (verbose)
+        if (verbose > 2)
           cerr << "Waiting for socket connections" << endl;
         // create the conversational socket
         ServerSocket new_sock;
@@ -174,6 +179,12 @@ int main(int argc, char* argv[])
         // wait for a client connection
         server->accept ( new_sock );
 
+        if (verbose > 2)
+        {
+          std::string client_hostname = new_sock.get_hostname();
+          std::string client_service  = new_sock.get_service();
+          cerr << "Accepted connection from " << client_hostname << ":" << client_service << endl;
+        }
         try
         {
           std::string socket_data;
@@ -188,7 +199,7 @@ int main(int argc, char* argv[])
           }
           catch ( SocketException& e)
           {
-            if (verbose > 1)
+            if (verbose > 2)
             {
               cerr << "main: end of data read:" << endl;
               cerr << oss.str();
@@ -203,16 +214,17 @@ int main(int argc, char* argv[])
           string utc_start;
           string first_sample_utc;
           uint64_t first_sample_index;
+          int first_beam;
           int nbeams;
           uint64_t num_events;
 
-          iss >> utc_start >> first_sample_utc >> first_sample_index >> nbeams >> num_events >> ws;
+          iss >> utc_start >> first_sample_utc >> first_sample_index >> first_beam >> nbeams >> num_events >> ws;
 
           if (verbose)
           {
             cerr << "main: UTC_START=" << utc_start << " SAMPLE_UTC=" << first_sample_utc 
                  << " SAMPLE_IDX=" << first_sample_index 
-                 << " NBEAMS=" << nbeams << " NUM_EVENTS=" << num_events << endl;
+                 << " FIRST_BEAM=" << first_beam << " NBEAMS=" << nbeams << " NUM_EVENTS=" << num_events << endl;
           }
 
           // check first_sample_utc to see if it matches an existing chunk
@@ -224,22 +236,26 @@ int main(int argc, char* argv[])
             {
               // get the relative age between this new beam/chunk and the existing ones
               time_t relative_age = chunks[ichunk]->get_relative_age (first_sample_utc);
-              if (relative_age < youngest)
-                youngest = relative_age;
+
+              // a match, therefore use this chunk
               if (relative_age == 0)
                 curr_chunk = ichunk;
+
+              if (relative_age < youngest)
+                youngest = relative_age;
             }
 
             // if the new beam's data preceeds the youngest chunk, discard it
-            if (youngest < 0)
+            if ((curr_chunk == -1) && (youngest < 0))
               curr_chunk = -2;
             
             // if we found a matching chunk
             if (curr_chunk >= 0)
             {
               if (verbose > 1)
-                cerr << "main: found existing chunk for " << first_sample_utc << endl;
+                cerr << "main: " << first_sample_utc << " belongs in chunk " << curr_chunk << endl;
             }
+
             // if not, create a new chunk           
             if (curr_chunk == -1)
             {
@@ -248,8 +264,10 @@ int main(int argc, char* argv[])
               chunks.push_back (new CandidateChunk(total_beams));
               curr_chunk = chunks.size() - 1; 
             }
-            else
-              cerr << "main: new beam " << first_sample_utc << " arrived too late" << endl;
+            else if (curr_chunk == -2)
+            {
+              cerr << "main: new beam " << first_sample_utc << " [" << first_beam << "-" << first_beam + nbeams << "] arrived too late [curr_chunk=" << curr_chunk << "]" << endl;
+            }
           }
       
           // record this for a little efficiency
@@ -260,7 +278,7 @@ int main(int argc, char* argv[])
           if (curr_chunk >= 0)
           {
             if (verbose > 1)
-              cerr << "main: chunks[" << curr_chunk <<"]->addBeam()" << endl;
+              cerr << "main: chunks[" << curr_chunk <<"]->addBeam(" << first_sample_utc << ", " << first_beam << ")" << endl;
             chunks[curr_chunk]->addBeam (utc_start, first_sample_utc, first_sample_index, nbeams, num_events, iss);
             
             // if we have reached the specified number of beams for this 

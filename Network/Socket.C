@@ -54,7 +54,6 @@ bool Socket::create()
 
 bool Socket::bind ( const char * address, const int port )
 {
-
   if ( ! is_valid() )
   {
     return false;
@@ -81,7 +80,6 @@ bool Socket::bind ( const char * address, const int port )
            ( struct sockaddr * ) &m_addr,
            sizeof ( m_addr ) );
 
-
   if ( bind_return == -1 )
     return false;
 
@@ -105,8 +103,8 @@ bool Socket::listen() const
 
 bool Socket::accept ( Socket& new_Socket ) const
 {
-  int addr_length = sizeof ( m_addr );
-  new_Socket.m_sock = ::accept ( m_sock, ( sockaddr * ) &m_addr, ( socklen_t * ) &addr_length );
+  int addr_length = sizeof ( new_Socket.m_addr );
+  new_Socket.m_sock = ::accept ( m_sock, ( sockaddr * ) &(new_Socket.m_addr), ( socklen_t * ) &addr_length );
 
   if ( new_Socket.m_sock <= 0 )
     return false;
@@ -215,3 +213,55 @@ int Socket::select_timeout ( float sleep_secs )
   // 0 if timeout, -1 if error
   return select (m_sock+1, rdsp, NULL, NULL, &timeout);
 }
+
+void Socket::print_socket_hostname ()
+{
+  int result;
+  socklen_t salen = sizeof(sockaddr_in);
+
+  char host[1024];
+  char service[20];
+  int flags = 0;
+
+  result = getnameinfo((const struct sockaddr * ) &m_addr, salen,
+                host, sizeof(host),
+                service, sizeof(service),
+                flags);
+
+  std::cout << "host=" << host << " service=" << service << std::endl;
+}
+
+std::string Socket::get_hostname ()
+{
+  int result;
+  socklen_t salen = sizeof(sockaddr_in);
+
+  char host[1024];
+  char service[20];
+  int flags = 0;
+
+  result = getnameinfo((const struct sockaddr * ) &m_addr, salen,
+                host, sizeof(host),
+                service, sizeof(service),
+                flags);
+
+  return std::string(host);
+}
+
+std::string Socket::get_service ()
+{
+  int result;
+  socklen_t salen = sizeof(sockaddr_in);
+
+  char host[1024];
+  char service[20];
+  int flags = 0;
+
+  result = getnameinfo((const struct sockaddr * ) &m_addr, salen,
+                host, sizeof(host),
+                service, sizeof(service),
+                flags);
+
+  return std::string(service);
+}
+

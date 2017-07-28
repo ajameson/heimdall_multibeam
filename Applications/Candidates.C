@@ -66,7 +66,7 @@ bool Candidate::is_coincident(const Candidate * c, const unsigned sep_time, cons
   //const int64_t sep_time = 3;
   //const uint64_t sep_filter = 4;
   const uint64_t sep_dm = 9999;
-  const float    sep_snr = 0.1;
+  const float    sep_snr = 0.4;
   const int64_t tol = sep_time * powf(2,max(c->filter,filter));
 
   // change temporal coincidence on bens suggestion 6/8/2012

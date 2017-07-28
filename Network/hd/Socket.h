@@ -17,7 +17,7 @@
 #include <arpa/inet.h>
 
 const int MAXHOSTNAME = 200;
-const int MAXCONNECTIONS = 5;
+const int MAXCONNECTIONS = 64;
 const int MAXRECV = 500;
 
 class Socket
@@ -44,6 +44,11 @@ class Socket
     bool is_valid() const { return m_sock != -1; }
 
     int select_timeout ( float sleep_secs );
+
+    void print_socket_hostname ();
+
+    std::string get_hostname ();
+    std::string get_service();
 
   private:
 

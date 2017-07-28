@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
       if ( params.verbosity >= 1 )
       {
         cout << "Executing pipeline on new gulp of " << nsamps_read
-             << " samples..." << endl;
+             << " samples, total_samples=" << nsamps_read+overlap << endl;
       }
       //pipeline_timer.start();
 
@@ -226,16 +226,16 @@ int main(int argc, char* argv[])
     // if processing data with more than one beam
     else if (params.nbeams > 1) 
     {
-      if ( params.verbosity >= 1 ) 
-      {
-        cout << "Executing pipeline on new gulp of " << nsamps_read
-             << " samples..." << endl;
-      }     
 
       hd_size nsamps_processed;
       hd_size nsamps_to_process;
       nsamps_to_process = nsamps_gulp + (overlap*params.nbeams);
 
+      if ( params.verbosity >= 1 ) 
+      {
+        cout << "Executing pipeline on new gulp of " << nsamps_read
+             << " samples, nsamps_to_process=" << nsamps_to_process << endl;
+      }     
       if (params.verbosity >= 2)
         fprintf (stderr, "filterbank=%p, nsamps_to_process=%d, nbits=%d "
                  "total_nsamps=%d params.nbeams=%d\n", &filterbank[0], 
