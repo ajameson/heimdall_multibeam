@@ -477,3 +477,44 @@ hd_error linear_stretch(const hd_float* d_in,
 	                  linear_stretch_functor(d_in, in_count, out_count));
 	return HD_NO_ERROR;
 }
+
+struct linear_stretch_beam_functor
+  : public thrust::unary_function<hd_float,hd_float> {
+  const hd_float* in;
+  hd_float        step;
+  hd_size         out_count;
+  linear_stretch_beam_functor(const hd_float* in_, 
+                              hd_size in_count_beam, 
+                              hd_size out_count_beam,
+                              hd_size nbeam_)
+    : in(in_), step(hd_float(in_count_beam-1)/(out_count_beam)), out_count(out_count_beam) {}
+  inline __host__ __device__
+  hd_float operator()(unsigned int i) const {
+    hd_size   beam = i / out_count;
+    hd_float     x = i * step;
+    unsigned int k = x + beam;
+    hd_float     o = (x-k) + beam;
+    return in[k] + ((o > 1e-5) ? o*(in[k+1]-in[k]) : 0.f);
+  }
+};
+
+// performs linear strech in batches of nbeam where 
+// len(d_in) == in_count_beam * nbeam
+// len(d_out) == out_count_beam * nbeam 
+hd_error linear_stretch_beam(const hd_float* d_in,
+                        hd_size         in_count_beam,
+                        hd_float*       d_out,
+                        hd_size         out_count_beam,
+                        hd_size         nbeam)
+{
+  using thrust::make_counting_iterator;
+  hd_size out_count = out_count_beam * nbeam; 
+  thrust::device_ptr<hd_float> d_out_begin(d_out);
+
+  thrust::transform(make_counting_iterator<unsigned int>(0),
+                    make_counting_iterator<unsigned int>(out_count),
+                    d_out_begin,
+                    linear_stretch_beam_functor(d_in, in_count_beam, out_count_beam, nbeam));
+  return HD_NO_ERROR;
+}
+

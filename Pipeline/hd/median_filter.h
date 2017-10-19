@@ -36,6 +36,12 @@ hd_error linear_stretch(const hd_float* d_in,
                         hd_float*       d_out,
                         hd_size         out_count);
 
+hd_error linear_stretch_beam(const hd_float* d_in,
+                        hd_size         in_count,
+                        hd_float*       d_out,
+                        hd_size         out_count,
+                        hd_size         nbeam);
+
 // Median-scrunches the corresponding elements from a collection of arrays
 // Note: This cannot (currently) handle count not being a multiple of 3
 hd_error median_scrunch3_array(const hd_float* d_in,
