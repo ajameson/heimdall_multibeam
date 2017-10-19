@@ -10,13 +10,28 @@ import time, numpy, math, os, fnmatch, tempfile, Gnuplot, datetime
 import trans_paths
 
 DL = 1
-TSAMP = 0.00032768
+#TSAMP = 0.00032768
+verbose = False
 
 ###########################################################################
 
 def plotCandDspsr (fil_file, sample, filter, dm, beam, snr):
+  
+  # determine filterbank sampling time in micro seconds
+  cmd = "header " + fil_file + " | grep 'Sample time' | awk '{print $NF}'"
+  p = os.popen(cmd)
+  response = p.readline().strip()
+  p.close()
+  tsamp = float(response) / 1e6;
 
-  cand_time = (TSAMP * sample)
+  # determine the number of channesl
+  cmd = "header " + fil_file + " | grep 'Number of channels' | awk '{print $NF}'"
+  p = os.popen(cmd)
+  response = p.readline().strip()
+  p.close()
+  nchan_fb = int(response)
+
+  cand_time = (tsamp * sample)
   cmd = "dmsmear -f 835 -b 31.25 -n 320 -d " + str(dm) + " -q 2>&1 "
   Dada.logMsg(2, DL, "plotCandDspsr: " + str(cmd))
   p = os.popen(cmd)
@@ -24,18 +39,20 @@ def plotCandDspsr (fil_file, sample, filter, dm, beam, snr):
   p.close()
   Dada.logMsg(2, DL, "plotCandDspsr: cand_band_smear='" + cand_band_smear + "'")
 
-  cand_filter_time = (2 ** filter) * TSAMP
+  cand_filter_time = (2 ** filter) * tsamp
 
   cand_smearing = float(cand_band_smear) + float(cand_filter_time)
 
   cand_start_time = cand_time - (2.0 * cand_smearing)
   cand_tot_time   = 5.0 * cand_smearing
+  if cand_start_time < 0:
+    cand_start_time = 0
   #cand_start_time = cand_time
   #cand_tot_time   = cand_smearing
 
   Dada.logMsg(2, DL, "plotCandDspsr: cand_time=" + str(cand_time) + " cand_start_time=" + str(cand_start_time))
 
-  bin_width = TSAMP * ( 2 ** filter)
+  bin_width = tsamp * ( 2 ** filter)
   nbin = int (cand_tot_time / bin_width)
 
   if nbin < 64:
@@ -73,11 +90,20 @@ def plotCandDspsr (fil_file, sample, filter, dm, beam, snr):
   width = "{0:.2f}".format(round(cand_filter_time*1000,2))
   title = beam + "  DM " + str(dm) + "  Width " + width + "ms"
 
+  # determine the ideal number of channels for the plot
   nchan = int(round(math.pow(float(snr)/4.0,2)))
-  if nchan < 80:
-    nchan = 80 
-  if  nchan > 512:
-    nchan = 512
+
+  Dada.logMsg(2, DL, "ideal nchan_plot=" + str(nchan))
+
+  # ensure some minimal amount of channelisation
+  while nchan < 64 or nchan_fb % nchan != 0:
+    nchan += 1
+
+  # upper limit on channelisation
+  if nchan > nchan_fb:
+    nchan = nchan_fb
+
+  Dada.logMsg(2, DL, "nchan_fb=" + str(nchan_fb) + " nchan=" + str(nchan))
 
   cmd = "psrplot -c flux:below:l='' -c above:l='" + title + "' -c x:unit=ms -p freq+ ./" + archive + " -j 'F " + str(nchan) + "' -x -D -/PNG";
   Dada.logMsg(2, DL, "plotCandDspsr: " + cmd)
@@ -94,7 +120,6 @@ def plotCandDspsr (fil_file, sample, filter, dm, beam, snr):
 
 def plotCandidate(fil_file, sample, filter, dm, beam):
 
-  verbose = False
   res_x = '800'
   res_y = '600'
   resolution = res_x + 'x' + res_y
