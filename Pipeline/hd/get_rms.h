@@ -33,6 +33,8 @@ private:
   boost::shared_ptr<GetRMSPlanMB_impl> m_impl;
 };
 
+// gets RMS across a multibeam block
+hd_error reblock_abs_beam (const hd_float * d_in, hd_size stride, hd_size length, hd_float *out, hd_size nbeams);
 
 // Convenience functions for one-off calls
 hd_float get_rms(hd_float* d_data, hd_size count);

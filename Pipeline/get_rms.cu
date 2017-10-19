@@ -69,28 +69,16 @@ public:
 
     thrust::device_ptr<hd_float> d_data_begin(d_data);
 
-    // includes corrupted overlap regions
-    //hd_size dm_delay    = beam_stride - beam_count;
-    //hd_size count_dirty = nbeams * beam_stride - dm_delay;
-    hd_size count_clean = nbeams * beam_count;
+    // beam_count are uncorrupted samples
+    hd_size count = nbeams * beam_count;
 
-    buf1.resize(count_clean);
-    buf2.resize(count_clean/5);
+    buf1.resize(count);
+    buf2.resize(count/5);
 
     hd_float* buf1_ptr = thrust::raw_pointer_cast(&buf1[0]);
     hd_float* buf2_ptr = thrust::raw_pointer_cast(&buf2[0]);
 
-    // slower
-    for (unsigned ibeam=0; ibeam<nbeams; ibeam++)
-    {
-      hd_size stride_offset = ibeam * beam_stride;
-      hd_size count_offset = ibeam * beam_count;
-
-      thrust::transform(d_data_begin + stride_offset, 
-                        d_data_begin + stride_offset + beam_count,
-                        buf1.begin() + count_offset,
-                        absolute_val<hd_float>());
-    }
+    reblock_abs_beam (d_data, beam_stride, beam_count, buf1_ptr, nbeams);
 
     for (hd_size size=beam_count; size>1; size/=5)
     {
@@ -118,7 +106,6 @@ public:
                            hd_size nbeams) {
 
     thrust::device_ptr<hd_float> d_data_begin(d_data);
-
     hd_size count = nbeams * beam_count;
 
     buf1.resize(count);
@@ -127,16 +114,7 @@ public:
     hd_float* buf1_ptr = thrust::raw_pointer_cast(&buf1[0]);
     hd_float* buf2_ptr = thrust::raw_pointer_cast(&buf2[0]);
 
-    for (unsigned ibeam=0; ibeam<nbeams; ibeam++)
-    {
-      hd_size stride_offset = ibeam * beam_stride;
-      hd_size count_offset = ibeam * beam_count;
-
-      thrust::transform(d_data_begin + stride_offset,
-                        d_data_begin + stride_offset + beam_count,
-                        buf1.begin() + count_offset,
-                        absolute_val<hd_float>());
-    }
+    reblock_abs_beam (d_data, beam_stride, beam_count, buf1_ptr, nbeams);
 
     for (hd_size size=count; size>1; size/=5)
     {
@@ -230,6 +208,42 @@ hd_error normalise_multibeam (hd_float* d_data, hd_float * d_rms, hd_size beam_s
                     d_data_begin,
                     normalise_beam_kernel (d_data, d_rms, beam_stride));
 
+  return HD_NO_ERROR;
+}
+
+struct reblock_abs_beam_functor
+  : public thrust::unary_function<hd_float,hd_float> {
+  const hd_float* in;
+  hd_size         length;
+  hd_float        delta;
+  reblock_abs_beam_functor(const hd_float* in_,
+                       hd_size in_length,
+                       hd_size in_delta)
+    : in(in_), length(in_length), delta(in_delta) {}
+  inline __host__ __device__
+  hd_float operator()(unsigned int o) const {
+    hd_size beam = o / length;
+    hd_size i = (beam * delta) + o;
+    return fabsf(in[i]);
+  }
+};
+
+// reblock input into output using an input stride and length
+hd_error reblock_abs_beam (const hd_float* d_in,
+                           hd_size         in_stride,
+                           hd_size         in_length,
+                           hd_float *      d_out,
+                           hd_size         nbeam)
+ {
+  using thrust::make_counting_iterator;
+  hd_size out_count = in_length * nbeam;
+  thrust::device_ptr<hd_float> d_out_begin(d_out);
+  hd_size delta = in_stride - in_length;
+
+  thrust::transform(make_counting_iterator<unsigned int>(0),
+                    make_counting_iterator<unsigned int>(out_count),
+                    d_out_begin,
+                    reblock_abs_beam_functor(d_in, in_length, delta));
   return HD_NO_ERROR;
 }
 
