@@ -73,6 +73,8 @@ class CandidateChunk
     // return the relative age (in seconds) for the specified utc
     time_t get_relative_age (std::string utc);
 
+    std::string get_utc () const { return first_sample_utc; };
+
   private:
 
     std::vector<std::vector<Candidate *> > cands;
