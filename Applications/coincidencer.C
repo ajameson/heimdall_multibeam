@@ -25,6 +25,8 @@ using namespace std;
 #include "hd/ServerSocket.h"
 #include "hd/SocketException.h"
 
+#define HD_TIMESTR "%Y-%m-%d-%H:%M:%S"
+
 int quit_threads = 0;
 
 void usage(void)
@@ -122,8 +124,12 @@ int main(int argc, char* argv[])
 
   std::string server_hostname = server->get_hostname();
   std::string server_service = server->get_service();
-  //if (verbose)
-    cerr << "Listening for connections on " << server_hostname << ":" << server_service << endl;
+  char buffer[64];
+  std::string prev_utc_start = "";
+
+  time_t now = time(0);
+  strftime (buffer, 64, HD_TIMESTR, localtime(&now));
+  cerr << "[" << buffer << "] listening for connections on " << server_hostname << ":" << server_service << endl;
 
   while ( continue_processing )
   {
@@ -166,7 +172,7 @@ int main(int argc, char* argv[])
         // wait for some activity on the socket
         while (!quit_threads && !connections_waiting)
         {
-          connections_waiting = server->select (1.0);
+          connections_waiting = server->select (0.05);
         }
 
         if ( quit_threads )
@@ -226,6 +232,14 @@ int main(int argc, char* argv[])
                  << " SAMPLE_IDX=" << first_sample_index 
                  << " FIRST_BEAM=" << first_beam << " NBEAMS=" << nbeams << " NUM_EVENTS=" << num_events << endl;
           }
+      
+          if (prev_utc_start.empty() || prev_utc_start.compare(utc_start) != 0)
+          {
+            now = time(0);
+            strftime (buffer, 64, HD_TIMESTR, localtime(&now));
+            cerr << "[" << buffer << "] processing UTC_START=[" << utc_start << "] PREV=[" << prev_utc_start << "]" << endl;
+            prev_utc_start = utc_start;
+          }
 
           // check first_sample_utc to see if it matches an existing chunk
           if ( curr_first_sample_utc.empty() || curr_first_sample_utc.compare(first_sample_utc) != 0 )
@@ -259,6 +273,10 @@ int main(int argc, char* argv[])
             // if not, create a new chunk           
             if (curr_chunk == -1)
             {
+              //now = time(0);
+              //strftime (buffer, 64, HD_TIMESTR, localtime(&now));
+              //cerr << "[" << buffer << "] new block   " << first_sample_utc << ", " << first_beam << endl;
+
               if (verbose > 1)
                 cerr << "main: creating new chunk for " << first_sample_utc << endl;
               chunks.push_back (new CandidateChunk(total_beams));
@@ -277,8 +295,13 @@ int main(int argc, char* argv[])
           // now parse the rest of this beam's data into the chunk
           if (curr_chunk >= 0)
           {
+
             if (verbose > 1)
-              cerr << "main: chunks[" << curr_chunk <<"]->addBeam(" << first_sample_utc << ", " << first_beam << ")" << endl;
+            {
+              now = time(0);
+              strftime (buffer, 64, HD_TIMESTR, localtime(&now));
+              cerr << "[" << buffer << "] chunks[" << curr_chunk <<"]->addBeam(" << first_sample_utc << ", " << first_beam << ")" << endl;
+            }
             chunks[curr_chunk]->addBeam (utc_start, first_sample_utc, first_sample_index, nbeams, num_events, iss);
             
             // if we have reached the specified number of beams for this 
@@ -287,7 +310,12 @@ int main(int argc, char* argv[])
               cerr << "main: chunks[" << curr_chunk << "]->get_nbeam()=" 
                    << chunks[curr_chunk]->get_nbeam() << " total_nbeams=" << total_beams << endl;
             if (chunks[curr_chunk]->get_nbeam() == total_beams || chunks.size() > max_chunks_to_wait)
+            {
+              //now = time(0);
+              //strftime (buffer, 64, HD_TIMESTR, localtime(&now));
+              //cerr << "[" << buffer << "] final beam   " << first_sample_utc << " beam=" << first_beam << endl;
               waiting_for_beams = false;
+            }
           }
           iss.str("");
           oss.str("");
@@ -313,6 +341,12 @@ int main(int argc, char* argv[])
         if (verbose > 1)
           cerr << "main: chunks["<<curr_chunk<<"]->write_coincident_candidates()" << endl;
         chunks[curr_chunk]->write_coincident_candidates();
+
+        // get the current time
+        time_t now = time(0);
+        strftime (buffer, 64, HD_TIMESTR, localtime(&now));
+
+        cerr << "[" << buffer << "] wrote cands " << chunks[curr_chunk]->get_utc() << endl;
 
         // discard the curr element on the vector
         delete chunks[curr_chunk];
@@ -341,4 +375,3 @@ void signal_handler(int signalValue)
   cerr << "receiged SIGNIT" << endl;
   quit_threads = 1;
 }
-
