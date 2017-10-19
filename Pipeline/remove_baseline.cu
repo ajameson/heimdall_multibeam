@@ -11,6 +11,7 @@
 
 #include <thrust/device_vector.h>
 
+#define OPTIMIZED
 
 class RemoveBaselinePlan_impl {
 	thrust::device_vector<hd_float> buf1;
@@ -42,18 +43,68 @@ public:
     hd_size nscrunches  = (hd_size)(log(beam_count/sample_count)/log(5.));
     hd_size count_round = pow(5.,nscrunches)*sample_count;
 
-    //std::cerr << "beam_stride=" << beam_stride << " count=" << count << " nbeams=" << nbeams
+    //std::cerr << "beam_stride=" << beam_stride << " nbeams=" << nbeams
+    //          << " beam_count=" << beam_count << " smooth_radius=" << smooth_radius 
     //          << " sample_count=" << sample_count << " nscrunches=" << nscrunches 
     //          << " count_round=" << count_round << std::endl;
 
+#ifdef OPTIMIZED
+    buf1.resize(nbeams * count_round);
+    buf2.resize(nbeams * (count_round/5));
+#else
     buf1.resize(count_round);
     buf2.resize(count_round/5);
+#endif
     hd_float* buf1_ptr = thrust::raw_pointer_cast(&buf1[0]);
     hd_float* buf2_ptr = thrust::raw_pointer_cast(&buf2[0]);
 
+#ifdef OPTIMIZED
+    hd_size nbeams_minus = nbeams - 1;
+    hd_size nsamps = beam_stride*nbeams - dm_delay;
+    baseline.resize (beam_stride*nbeams);
+    hd_float* baseline_ptr = thrust::raw_pointer_cast(&baseline[0]);
+
+    // perform resampling of each beam to the rounded size [count_round]
+    // first do nbeam-1, which are all the same length, and then the final beam
+    linear_stretch_beam (d_data, beam_stride, buf1_ptr, count_round, nbeams_minus);
+    linear_stretch (d_data + (nbeams_minus * beam_stride), beam_count, 
+                    buf1_ptr + (nbeams_minus * count_round), count_round);
+
+    // then median scrunch untill we reach the sample size, each beam is count_round
+    for (hd_size size=count_round; size>sample_count; size/=5) 
+    {
+      median_scrunch5_beam (buf1_ptr, size, nbeams, buf2_ptr);
+      std::swap(buf1_ptr, buf2_ptr);
+    }
+
+    // Note: output is now at buf1_ptr
+    thrust::device_ptr<hd_float> buf1_begin(buf1_ptr);
+    thrust::device_ptr<hd_float> buf2_begin(buf2_ptr);
+
+    linear_stretch_beam (buf1_ptr, sample_count, baseline_ptr, beam_stride, nbeams_minus);
+    linear_stretch (buf1_ptr + (nbeams_minus * sample_count), sample_count,
+                    baseline_ptr + (nbeams_minus * beam_stride), beam_count);
+
+    // TESTING
+    // hd_size to_write = beam_count;
+    // hd_size offset = nbeams_minus * beam_stride;
+    // write_device_time_series(d_data + offset, to_write, 1.f, "new_pre_baseline.tim");
+    // write_device_time_series(baseline_ptr + offset, to_write, 1.f, "new_the_baseline.tim");
+
+    // Now we just subtract it off
+    thrust::transform(d_data_begin, d_data_begin + nsamps,
+                      baseline.begin(),
+                      d_data_begin,
+                      thrust::minus<hd_float>());
+
+    // TESTING
+    // write_device_time_series(d_data + offset, to_write, 1.f, "new_post_baseline.tim");
+
+#else
+
     baseline.resize(beam_stride);
     hd_float* baseline_ptr = thrust::raw_pointer_cast(&baseline[0]);
-    
+
     for (hd_size ibeam=0; ibeam<nbeams; ibeam++)
     {
       hd_size beam_offset = ibeam * beam_stride;
@@ -65,7 +116,7 @@ public:
 
       // First we re-sample to the rounded size
       linear_stretch(d_data + beam_offset, beam_count, buf1_ptr, count_round);
-    
+
       // Then we median scrunch until we reach the sample size
       for( hd_size size=count_round; size>sample_count; size/=5 ) {
         median_scrunch5(buf1_ptr, size, buf2_ptr);
@@ -85,18 +136,19 @@ public:
       linear_stretch(buf2_ptr, sample_count*2+2, baseline_ptr, count);
     
       // TESTING
-      // write_device_time_series(d_data, count, 1.f, "pre_baseline.tim");
-      // write_device_time_series(baseline_ptr, count, 1.f, "thebaseline.tim");
+      // write_device_time_series(d_data+beam_offset, count, 1.f, "old_pre_baseline.tim");
+      // write_device_time_series(baseline_ptr, count, 1.f, "old_the_baseline.tim");
     
       // Now we just subtract it off
       thrust::transform(d_data_begin + beam_offset, d_data_begin+beam_offset+count,
                         baseline.begin(),
                         d_data_begin + beam_offset,
                         thrust::minus<hd_float>());
-    
+
       // TESTING
-      // write_device_time_series(d_data, count, 1.f, "post_baseline.tim");
+      // write_device_time_series(d_data+beam_offset, count, 1.f, "old_post_baseline.tim");
     }
+#endif 
 
     // write_device_time_series(d_data, (beam_stride*nbeams)-dm_delay, 1.f, "post_baselines.tim");
 
