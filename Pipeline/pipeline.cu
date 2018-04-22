@@ -41,13 +41,15 @@ using thrust::device_vector;
 #include "hd/ClientSocket.h"
 #include "hd/SocketException.h"
 #include "hd/stopwatch.h"         // For benchmarking
-#include "hd/write_time_series.h" // For debugging
 
 #include <dedisp.h>
 
 #define HD_BENCHMARK
 //#define RAW_TEST_OUTPUT
 
+#ifdef RAW_TEST_OUTPUT
+#include "hd/write_time_series.h" // For debugging
+#endif
 
 #ifdef HD_BENCHMARK
   void start_timer(Stopwatch& timer) { timer.start(); }
@@ -460,11 +462,19 @@ hd_error hd_execute(hd_pipeline pl,
 
     hd_size  cur_dm_delay = dedisp_get_dm_delay (pl->dedispersion_plan, dm_idx) / cur_dm_scrunch;
 
-    // TODO AJ this should not need to be the max dispersion delay...
+    // TODO AJ this should not need to be the max dispersion delay - but it seems necessary for reducing
+    // false Cands in the final beam...
     cur_dm_delay =  max_dispersion_delay / cur_dm_scrunch;
     hd_size  cur_beam_stride = nsamps / nbeams / cur_dm_scrunch;
     hd_size  cur_beam_nsamps = cur_beam_stride - cur_dm_delay;
     
+    if (cur_dm_delay >= cur_beam_stride)
+    {
+      cout << "DM trial " << dm_idx << " has delay [" << cur_dm_delay << "] > samples [" 
+            << cur_beam_stride << "]" << endl;
+      break;
+    }
+
     // Bail if the candidate rate is too high
     if( too_many_giants ) {
       break;
@@ -476,6 +486,9 @@ hd_error hd_execute(hd_pipeline pl,
       cout << "cur_nsamps = " << cur_nsamps << endl;
       cout << "dt0        = " << pl->params.dt << endl;
       cout << "cur_dt     = " << cur_dt << endl;
+      cout << "cur_beam_stride = " << cur_beam_stride << endl;
+      cout << "cur_dm_delay = " << cur_dm_delay << endl;
+      cout << "cur_dm_scrunch = " << cur_dm_scrunch << endl;
         
       cout << "\tBaselining and normalising each beam..." << endl;
     }
@@ -483,6 +496,7 @@ hd_error hd_execute(hd_pipeline pl,
     hd_float* time_series = thrust::raw_pointer_cast(&pl->d_time_series[0]);
     hd_float* beam_rms = thrust::raw_pointer_cast(&d_beam_rms[0]);
     
+
     // Copy the time series to the device and convert to floats
     hd_size offset = dm_idx * series_stride * pl->params.dm_nbits/8;
     start_timer(copy_timer);
@@ -527,6 +541,11 @@ hd_error hd_execute(hd_pipeline pl,
     // Note: Divided by 2 to form a smoothing radius
     hd_size nsamps_smooth = hd_size(pl->params.baseline_length /
                                     (2 * cur_dt));
+
+    if (pl->params.verbosity >= 4 ) {
+      cout << "Baseliner cur_beam_stride=" << cur_beam_stride << " cur_beam_nsamps=" << cur_beam_nsamps << " nsamps_smooth=" << nsamps_smooth << " nbeams=" << nbeams << endl;
+    }
+
     // Crop the smoothing length in case not enough samples
     start_timer(baseline_timer);
 
@@ -536,6 +555,9 @@ hd_error hd_execute(hd_pipeline pl,
       return throw_error(error);
     }
     
+    if (pl->params.verbosity >= 4 ) {
+      cout << "Baseliner done" << endl;
+    }
 #ifdef RAW_TEST_OUTPUT
     if( dm_idx == write_dm && first_idx == 0 ) {
       write_device_time_series(time_series, cur_nsamps,
@@ -543,15 +565,14 @@ hd_error hd_execute(hd_pipeline pl,
     }
 #endif
     // -------------------
-   
  
     // Normalise
     // ---------
+
     start_timer(normalise_timer);
 
     // multibeam normalisation
     error = rms_getter.exec_multibeam(time_series, beam_rms, cur_beam_stride, cur_beam_nsamps, nbeams); 
-    cudaDeviceSynchronize();
 
     // normalise each beam
     error = normalise_multibeam (time_series, beam_rms, cur_beam_stride, cur_nsamps, nbeams);
@@ -577,6 +598,14 @@ hd_error hd_execute(hd_pipeline pl,
     // This is the relative offset into the time series of the filtered data
     hd_size cur_filtered_offset = rel_boxcar_max / 2;
     
+    // Ensure there are enough time samples for filtering at this boxcar
+    if (cur_dm_delay + rel_boxcar_max > cur_beam_stride)
+    {
+      cerr << "DM Delay and Max Boxcar [" << cur_dm_delay + rel_boxcar_max 
+           << "] > samples [" << cur_beam_stride << "]" << endl;
+      break;
+    }
+
     // Create and prepare matched filtering operations
     start_timer(filter_timer);
     // Note: Filter width is relative to the current time resolution
@@ -597,6 +626,7 @@ hd_error hd_execute(hd_pipeline pl,
     for( hd_size filter_width=cur_dm_scrunch;
          filter_width<=pl->params.boxcar_max;
          filter_width*=2 ) {
+
       hd_size rel_filter_width = filter_width / cur_dm_scrunch;
       hd_size filter_idx = get_filter_index(filter_width);
 
@@ -624,29 +654,19 @@ hd_error hd_execute(hd_pipeline pl,
         return throw_error(error);
       }
       // Divide and round up
-      hd_size cur_nsamps_filtered = ((max_nsamps_filtered-1)
-                                     / rel_tscrunch_width + 1);
+      hd_size cur_nsamps_filtered = ((max_nsamps_filtered-1) / (rel_tscrunch_width+1));
       hd_size cur_scrunch = cur_dm_scrunch * rel_tscrunch_width;
 
-      hd_size  cur_beam_stride = nsamps / nbeams / cur_dm_scrunch;
-      hd_size  cur_beam_nsamps = cur_beam_stride - (cur_dm_delay + rel_boxcar_max);
-    
+      // number of valid samples in each beam
+      hd_size cur_beam_nsamps = cur_beam_stride - (cur_dm_delay + rel_boxcar_max);
+
+      if (pl->params.verbosity >= 4) {
+        cout << "Filter: max_nsamps_filtered=" << max_nsamps_filtered << " cur_nsamps_filtered=" <<
+          cur_nsamps_filtered << " cur_beam_stride=" << cur_beam_stride << " cur_beam_nsamps=" << cur_beam_nsamps << endl;
+      }
+
+
       // Normalise the filtered time series (RMS ~ sqrt(time))
-      // TODO: Avoid/hide the ugly thrust code?
-      //         Consider making it a method of MatchedFilterPlan
-      /*
-      thrust::constant_iterator<hd_float> 
-        norm_val_iter(1.0 / sqrt((hd_float)rel_filter_width));
-      thrust::transform(thrust::device_ptr<hd_float>(filtered_series),
-                        thrust::device_ptr<hd_float>(filtered_series)
-                        + cur_nsamps_filtered,
-                        norm_val_iter,
-                        thrust::device_ptr<hd_float>(filtered_series),
-                        thrust::multiplies<hd_float>());
-      */
-
-      // TESTING Proper normalisation
-
 #ifdef RAW_TEST_OUTPUT
       if( dm_idx == write_dm && first_idx == 0 && filter_width == write_width) {
         write_device_time_series(filtered_series, cur_nsamps_filtered,
@@ -655,13 +675,13 @@ hd_error hd_execute(hd_pipeline pl,
 #endif
 
       // compute common RMS across whole block
-      hd_float block_rms = rms_getter.exec_multibeam(filtered_series, cur_beam_stride, cur_beam_nsamps, nbeams);
+      hd_float block_rms = rms_getter.exec_multibeam (filtered_series, cur_beam_stride, cur_beam_nsamps, nbeams);
 
       // normalise whole block
       error = normalise_multibeam (filtered_series, block_rms, cur_nsamps_filtered);
 
       stop_timer(filter_timer);
-      
+
 #ifdef RAW_TEST_OUTPUT
       if (dm_idx == write_dm && first_idx == 0 && filter_width == write_width) {
         write_device_time_series(filtered_series, cur_nsamps_filtered,
@@ -677,17 +697,14 @@ hd_error hd_execute(hd_pipeline pl,
       
       start_timer(giants_timer);
 
-/*
-      hd_float* filtered_series_offset = filtered_series;
-      hd_size   cur_nsamps_filtered_offset = cur_nsamps_filtered;
-      //if (pl->params.ignore_first_beam && pl->params.beam == 1)
-      if (pl->params.beam == 0 && false)
+#define IGNORE_BEAM_001
+#ifdef IGNORE_BEAM_001
+      if (pl->params.beam == 0)
       {
-        hd_size cur_nsamps_filtered_per_beam = cur_nsamps_filtered / nbeams;
-        cur_nsamps_filtered_offset -= cur_nsamps_filtered_per_beam;
-        filtered_series_offset += cur_nsamps_filtered_per_beam;
+        thrust::fill(pl->d_filtered_series.begin(), pl->d_filtered_series.begin() + cur_beam_stride, 0);
       }
-a*/
+#endif
+
       error = giant_finder.exec(filtered_series, cur_nsamps_filtered,
                                 nbeams,
                                 pl->params.detect_thresh,
@@ -876,6 +893,7 @@ a*/
           n_events++;
       }
 
+
       ClientSocket client_socket ( pl->params.coincidencer_host, pl->params.coincidencer_port );
 
       // send the UTC_START first
@@ -901,7 +919,7 @@ a*/
       client_socket << oss.str();
       oss.flush();
 
-      //cout << "Writing " << n_events << " to coincidencer server" << endl;
+      //cout << "Generated " << n_events << " for UTC " << buffer << endl;
 
       // reset oss
       oss.str("");
@@ -920,7 +938,9 @@ a*/
           hd_size samp_offset = h_group_inds[i] - (nsamps_beam * beam_idx);
           hd_size samp_idx = first_idx + samp_offset;
 
-          oss << h_group_peaks[i] << "\t"
+          hd_float snr = isinf(h_group_peaks[i]) ? 0.0 : h_group_peaks[i];
+
+          oss << snr << "\t"
               << samp_idx << "\t"
               << samp_idx * pl->params.dt << "\t"
               << h_group_filter_inds[i] << "\t"
@@ -973,7 +993,9 @@ a*/
           hd_size samp_offset = h_group_inds[i] - (nsamps_beam * beam_idx);
           hd_size samp_idx = first_idx + samp_offset;
 
-          cand_file << h_group_peaks[i] << "\t"
+          hd_float snr = isinf(h_group_peaks[i]) ? 0.0 : h_group_peaks[i];
+
+          cand_file << snr << "\t"
                     << samp_idx << "\t"
                     << pl->params.dt * samp_idx << "\t"
                     << h_group_filter_inds[i] << "\t"
@@ -999,16 +1021,16 @@ a*/
 #ifdef HD_BENCHMARK
   if( pl->params.verbosity >= 1 )
   {
-  cout << "Mem alloc time:          " << memory_timer.getTime() << endl;
-  cout << "0-DM cleaning time:      " << clean_timer.getTime() << endl;
-  cout << "Dedispersion time:       " << dedisp_timer.getTime() << endl;
-  cout << "Copy time:               " << copy_timer.getTime() << endl;
-  cout << "Baselining time:         " << baseline_timer.getTime() << endl;
-  cout << "Normalisation time:      " << normalise_timer.getTime() << endl;
-  cout << "Filtering time:          " << filter_timer.getTime() << endl;
-  cout << "Find giants time:        " << giants_timer.getTime() << endl;
-  cout << "Process candidates time: " << candidates_timer.getTime() << endl;
-  cout << "Total time:              " << total_timer.getTime() << endl;
+    cout << "Mem alloc time:          " << memory_timer.getTime() << endl;
+    cout << "0-DM cleaning time:      " << clean_timer.getTime() << endl;
+    cout << "Dedispersion time:       " << dedisp_timer.getTime() << endl;
+    cout << "Copy time:               " << copy_timer.getTime() << endl;
+    cout << "Baselining time:         " << baseline_timer.getTime() << endl;
+    cout << "Normalisation time:      " << normalise_timer.getTime() << endl;
+    cout << "Filtering time:          " << filter_timer.getTime() << endl;
+    cout << "Find giants time:        " << giants_timer.getTime() << endl;
+    cout << "Process candidates time: " << candidates_timer.getTime() << endl;
+    cout << "Total time:              " << total_timer.getTime() << endl;
   }
 
   hd_float time_sum = (memory_timer.getTime() +
@@ -1021,22 +1043,6 @@ a*/
                        giants_timer.getTime() +
                        candidates_timer.getTime());
   hd_float misc_time = total_timer.getTime() - time_sum;
-  
-  /*
-  std::ofstream timing_file("timing.dat", std::ios::app);
-  timing_file << total_timer.getTime() << "\t"
-              << misc_time << "\t"
-              << memory_timer.getTime() << "\t"
-              << clean_timer.getTime() << "\t"
-              << dedisp_timer.getTime() << "\t"
-              << copy_timer.getTime() << "\t"
-              << baseline_timer.getTime() << "\t"
-              << normalise_timer.getTime() << "\t"
-              << filter_timer.getTime() << "\t"
-              << giants_timer.getTime() << "\t"
-              << candidates_timer.getTime() << endl;
-  timing_file.close();
-  */
   
 #endif // HD_BENCHMARK
   
