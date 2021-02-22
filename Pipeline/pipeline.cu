@@ -28,7 +28,6 @@ using thrust::device_vector;
 
 #include "hd/pipeline.h"
 #include "hd/maths.h"
-#include "hd/clean_filterbank_rfi.h"
 
 #include "hd/remove_baseline.h"
 #include "hd/matched_filter.h"
@@ -69,7 +68,6 @@ struct hd_pipeline_t {
   //MPI_Comm    communicator;
 
   // Memory buffers used during pipeline execution
-  std::vector<hd_byte>    h_clean_filterbank;
   host_vector<hd_byte>    h_dm_series;
   device_vector<hd_float> d_time_series;
   device_vector<hd_float> d_filtered_series;
@@ -183,6 +181,8 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, hd_params params) {
   }
   
   if( pipeline->params.use_scrunching ) {
+    if( params.verbosity >= 2 )
+      cout << "Enabling adaptive dt" << endl;
     derror = dedisp_enable_adaptive_dt(pipeline->dedispersion_plan,
                                        pipeline->params.dm_pulse_width,
                                        pipeline->params.scrunch_tol);
@@ -207,6 +207,13 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, hd_params params) {
   return HD_NO_ERROR;
 }
 
+hd_size hd_get_max_overlap (hd_pipeline pl, hd_size nbeams)
+{
+  hd_size max_dispersion_delay = dedisp_get_max_delay(pl->dedispersion_plan);
+  hd_size max_overlap = (pl->params.boxcar_max + max_dispersion_delay) * nbeams;
+  return max_overlap;
+}
+
 hd_error hd_execute(hd_pipeline pl,
                     const hd_byte* h_filterbank, hd_size nsamps, hd_size nbits,
                     hd_size first_idx, hd_size nbeams, hd_size* nsamps_processed) {
@@ -214,7 +221,6 @@ hd_error hd_execute(hd_pipeline pl,
   
   Stopwatch total_timer;
   Stopwatch memory_timer;
-  Stopwatch clean_timer;
   Stopwatch dedisp_timer;
   Stopwatch communicate_timer;
   Stopwatch copy_timer;
@@ -227,55 +233,11 @@ hd_error hd_execute(hd_pipeline pl,
   
   start_timer(total_timer);
   
-  start_timer(clean_timer);
-  // Note: Filterbank cleaning must be done out-of-place
   hd_size nbytes = nsamps * pl->params.nchans * nbits / 8;
   start_timer(memory_timer);
-  //pl->h_clean_filterbank.resize(nbytes);
-  pl->h_clean_filterbank.resize(nbytes, 0);
   std::vector<int>          h_killmask(pl->params.nchans, 1);
   stop_timer(memory_timer);
   
-  if( pl->params.verbosity >= 2 ) {
-    cout << "\tCleaning 0-DM filterbank..." << endl;
-  }
-
-  // Start by cleaning up the filterbank based on the zero-DM time series
-  if( pl->params.verbosity >= 3 ) {
-    /*
-    cout << "\tWriting dirty filterbank to disk..." << endl;
-    write_host_filterbank(&h_filterbank[0],
-                          pl->params.nchans, nsamps, nbits,
-                          pl->params.dt, pl->params.f0, pl->params.df,
-                          "dirty_filterbank.fil");
-    */
-  }
-  // Note: We only clean the narrowest zero-DM signals; otherwise we
-  //         start removing real stuff from higher DMs.
-  // Commenting out for now... VR
-
-#ifdef CLEANING_RFI
-  hd_float cleaning_dm = 0.f;
-  error = clean_filterbank_rfi(pl->dedispersion_plan,
-                               &h_filterbank[0],
-                               nsamps,
-                               nbits,
-                               &pl->h_clean_filterbank[0],
-                               &h_killmask[0],
-                               cleaning_dm,
-                               pl->params.dt,
-                               pl->params.baseline_length,
-                               pl->params.rfi_tol,
-                               pl->params.rfi_min_beams,
-                               1, //pl->params.boxcar_max
-                               nbeams);
-  if( error != HD_NO_ERROR ) {
-    return throw_error(error);
-  }
-#else
-  std::copy(&h_filterbank[0],&h_filterbank[nsamps*pl->params.nchans],pl->h_clean_filterbank.begin());
-#endif
-
   if( pl->params.verbosity >= 2 ) {
     cout << "Applying manual killmasks" << endl;
   }
@@ -294,28 +256,7 @@ hd_error hd_execute(hd_pipeline pl,
   if( pl->params.verbosity >= 2 ) {
     cout << "Bad channel count = " << bad_chan_count << endl;
   }
-
-  // TESTING
-  //h_clean_filterbank.assign(h_filterbank, h_filterbank+nbytes);
   
-  stop_timer(clean_timer);
-  
-  if( pl->params.verbosity >= 3 ) {
-    /*
-    cout << "\tWriting killmask to disk..." << endl;
-    std::ofstream killfile("killmask.dat");
-    for( size_t i=0; i<h_killmask.size(); ++i ) {
-      killfile << h_killmask[i] << "\n";
-    }
-    killfile.close();
-    
-    cout << "\tWriting cleaned filterbank to disk..." << endl;
-    write_host_filterbank(&pl->h_clean_filterbank[0],
-                          pl->params.nchans, nsamps, nbits,
-                          pl->params.dt, pl->params.f0, pl->params.df,
-                          "clean_filterbank.fil");
-    */
-  }
   if( pl->params.verbosity >= 2 ) {
     cout << "\tGenerating DM list..." << endl;
   }
@@ -388,9 +329,20 @@ hd_error hd_execute(hd_pipeline pl,
     cerr << "series_stride == nsamps_computed = " << series_stride << " dm_count=" << dm_count << endl;
     cerr << "pl->h_dm_series.resize(" << series_stride * pl->params.dm_nbits/8 * dm_count << ")" << endl;
   }
-  pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count, 0);
-  pl->d_time_series.resize(series_stride, 0);
-  pl->d_filtered_series.resize(series_stride, 0);
+
+  if (first_idx == 0)
+  {
+    hd_size overallocation = nsamps + hd_get_max_overlap (pl, nbeams);
+    pl->h_dm_series.resize(overallocation * pl->params.dm_nbits/8 * dm_count, 0);
+    pl->d_time_series.resize(overallocation, 0);
+    pl->d_filtered_series.resize(overallocation, 0);
+  }
+  else
+  {
+    pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count, 0);
+    pl->d_time_series.resize(series_stride, 0);
+    pl->d_filtered_series.resize(series_stride, 0);
+  }
   
   stop_timer(memory_timer);
   
@@ -420,7 +372,7 @@ hd_error hd_execute(hd_pipeline pl,
   
   // Dedisperse
   dedisp_error       derror;
-  const dedisp_byte* in = &pl->h_clean_filterbank[0];
+  const dedisp_byte* in = &h_filterbank[0];
   dedisp_byte*       out = &pl->h_dm_series[0];
   dedisp_size        in_nbits = nbits;
   dedisp_size        in_stride = pl->params.nchans * in_nbits/8;
@@ -438,10 +390,12 @@ hd_error hd_execute(hd_pipeline pl,
   }
   
 #ifdef RAW_TEST_OUTPUT
+  hd_size write_idx = 9340;
+  write_idx = 0;
   hd_size write_dm = 200;
-  hd_size write_width = 256;
+  hd_size write_width = 8;
 
-  if( first_idx == 0 ) {
+  if( first_idx == write_idx ) {
     write_host_time_series((unsigned int*)out, nsamps_computed, out_nbits,
                            pl->params.dt, "dedispersed_0.tim");
   }
@@ -528,7 +482,7 @@ hd_error hd_execute(hd_pipeline pl,
     }
 
 #ifdef RAW_TEST_OUTPUT
-    if( dm_idx == write_dm && first_idx == 0 ) 
+    if( dm_idx == write_dm && first_idx == write_idx ) 
     {
       write_device_time_series(time_series, cur_nsamps,
                                cur_dt, "dedispersed.tim");
@@ -542,13 +496,14 @@ hd_error hd_execute(hd_pipeline pl,
     hd_size nsamps_smooth = hd_size(pl->params.baseline_length /
                                     (2 * cur_dt));
 
-    if (pl->params.verbosity >= 4 ) {
+    if (pl->params.verbosity >= 3) {
       cout << "Baseliner cur_beam_stride=" << cur_beam_stride << " cur_beam_nsamps=" << cur_beam_nsamps << " nsamps_smooth=" << nsamps_smooth << " nbeams=" << nbeams << endl;
     }
 
     // Crop the smoothing length in case not enough samples
     start_timer(baseline_timer);
 
+    // Run the baseline remover for each beam
     error = baseline_remover.exec(time_series, cur_beam_stride, cur_beam_nsamps, nsamps_smooth, nbeams);
     stop_timer(baseline_timer);
     if( error != HD_NO_ERROR ) {
@@ -559,7 +514,7 @@ hd_error hd_execute(hd_pipeline pl,
       cout << "Baseliner done" << endl;
     }
 #ifdef RAW_TEST_OUTPUT
-    if( dm_idx == write_dm && first_idx == 0 ) {
+    if( dm_idx == write_dm && first_idx == write_idx ) {
       write_device_time_series(time_series, cur_nsamps,
                                cur_dt, "baselined.tim");
     }
@@ -581,7 +536,7 @@ hd_error hd_execute(hd_pipeline pl,
 
     // TESTING   
 #ifdef RAW_TEST_OUTPUT
-    if( dm_idx == write_dm && first_idx == 0 ) {
+    if( dm_idx == write_dm && first_idx == write_idx ) {
       write_device_time_series(time_series, cur_nsamps,
                                cur_dt, "normalised.tim");
     }
@@ -654,7 +609,7 @@ hd_error hd_execute(hd_pipeline pl,
         return throw_error(error);
       }
       // Divide and round up
-      hd_size cur_nsamps_filtered = ((max_nsamps_filtered-1) / (rel_tscrunch_width+1));
+      hd_size cur_nsamps_filtered = ((max_nsamps_filtered-1) / rel_tscrunch_width + 1);
       hd_size cur_scrunch = cur_dm_scrunch * rel_tscrunch_width;
 
       // number of valid samples in each beam
@@ -668,7 +623,7 @@ hd_error hd_execute(hd_pipeline pl,
 
       // Normalise the filtered time series (RMS ~ sqrt(time))
 #ifdef RAW_TEST_OUTPUT
-      if( dm_idx == write_dm && first_idx == 0 && filter_width == write_width) {
+      if( dm_idx == write_dm && first_idx == write_idx && filter_width == write_width) {
         write_device_time_series(filtered_series, cur_nsamps_filtered,
                                  cur_dt, "filtered_unnormalised.tim");
       }
@@ -683,7 +638,7 @@ hd_error hd_execute(hd_pipeline pl,
       stop_timer(filter_timer);
 
 #ifdef RAW_TEST_OUTPUT
-      if (dm_idx == write_dm && first_idx == 0 && filter_width == write_width) {
+      if (dm_idx == write_dm && first_idx == write_idx && filter_width == write_width) {
         write_device_time_series(filtered_series, cur_nsamps_filtered,
                                  cur_dt, "filtered_normalised.tim");
       }
@@ -1022,7 +977,6 @@ hd_error hd_execute(hd_pipeline pl,
   if( pl->params.verbosity >= 1 )
   {
     cout << "Mem alloc time:          " << memory_timer.getTime() << endl;
-    cout << "0-DM cleaning time:      " << clean_timer.getTime() << endl;
     cout << "Dedispersion time:       " << dedisp_timer.getTime() << endl;
     cout << "Copy time:               " << copy_timer.getTime() << endl;
     cout << "Baselining time:         " << baseline_timer.getTime() << endl;
@@ -1034,7 +988,6 @@ hd_error hd_execute(hd_pipeline pl,
   }
 
   hd_float time_sum = (memory_timer.getTime() +
-                       clean_timer.getTime() +
                        dedisp_timer.getTime() +
                        copy_timer.getTime() +
                        baseline_timer.getTime() +
