@@ -29,24 +29,28 @@ public:
 		//   to ensure robustness against outliers (e.g., strong RFI spikes).
     hd_size dm_delay    = beam_stride - beam_count;
 
+    hd_size beam_samples = beam_stride;
+
     // Note: This parameter allows tuning to match the smoothing length
     //         of the original iterative-clipping algorithm.
     hd_float oversample = 2;
     // Find the desired time resolution
-    hd_size  sample_count = (hd_size)(oversample * hd_float(beam_count)/(2*smooth_radius) + 0.5);
+    hd_size  sample_count = (hd_size)(oversample * hd_float(beam_samples)/(2*smooth_radius) + 0.5);
     if( sample_count == 0 ) {
       // Too few samples, no need to baseline
       return HD_NO_ERROR;
     }
 
     // As we will use median-of-5, round to sample_count times a power of five
-    hd_size nscrunches  = (hd_size)(log(beam_count/sample_count)/log(5.));
+    hd_size nscrunches  = (hd_size)(log(beam_samples/sample_count)/log(5.));
     hd_size count_round = pow(5.,nscrunches)*sample_count;
 
-    //std::cerr << "beam_stride=" << beam_stride << " nbeams=" << nbeams
-    //          << " beam_count=" << beam_count << " smooth_radius=" << smooth_radius 
-    //          << " sample_count=" << sample_count << " nscrunches=" << nscrunches 
-    //          << " count_round=" << count_round << std::endl;
+    /*
+    std::cerr << "beam_stride=" << beam_stride << " nbeams=" << nbeams
+              << " beam_count=" << beam_count << " smooth_radius=" << smooth_radius
+              << " sample_count=" << sample_count << " nscrunches=" << nscrunches
+              << " count_round=" << count_round << std::endl;
+    */
 
 #ifdef OPTIMIZED
     buf1.resize(nbeams * count_round);
