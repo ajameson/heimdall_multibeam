@@ -24,6 +24,9 @@ class PSRDadaRingBuffer : public DataSource {
     size_t get_data (size_t nsamps, char* data);
     size_t get_data_block (size_t nsamps, char* data);
 
+    size_t open_data_block (char ** buf_ptr);
+    void   close_data_block (uint64_t bytes_in_block);
+
   private:
 
     key_t  dada_key;

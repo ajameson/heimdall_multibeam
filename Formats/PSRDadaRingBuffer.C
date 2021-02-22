@@ -352,3 +352,59 @@ size_t PSRDadaRingBuffer::get_data_block (size_t nsamps, char* data)
 
   return nsamps_read;
 }
+
+size_t PSRDadaRingBuffer::open_data_block (char ** buf_ptr)
+{
+  uint64_t block_id, bytes_in_block;
+
+  if (!curr_block)
+  {
+    curr_block = ipcio_open_block_read (hdu->data_block, &bytes_in_block, &block_id);
+    if (!curr_block)
+    {
+      if (ipcbuf_eod((ipcbuf_t*)hdu->data_block))
+      {
+        cerr << "PSRDadaRingBuffer::get_data_block: EOD" << endl;
+        return 0;
+      }
+      else
+      {
+        cerr << "PSRDadaRingBuffer::get_data: ipcio_open_block_read failed" << endl;
+        return -1;
+      }
+    }
+  }
+  else
+  {
+    cerr << "PSRDadaRingBuffer::get_data_block block already open" << endl;
+    return -1;
+  }
+
+  *buf_ptr = curr_block;
+
+  if (bytes_in_block != buf_sz)
+  {
+    cerr << "PSRDadaRingBuffer::open_data_block: bytes avaiable in data block [" << bytes_in_block << "] less than 1 full block [" << buf_sz << "]" << endl;
+  }
+
+  size_t nsamps_read = bytes_in_block / (nchan * (nbit / 8));
+  return nsamps_read;
+}
+
+void PSRDadaRingBuffer::close_data_block (size_t nsamps_read)
+{
+  uint64_t bytes_in_block = nsamps_read * (nchan * (nbit / 8));
+
+  // close the data block
+  ipcio_close_block_read (hdu->data_block, bytes_in_block);
+  curr_block = 0;
+
+  if (bytes_in_block != buf_sz)
+    if (!ipcbuf_eod((ipcbuf_t*)hdu->data_block))
+      cerr << "PSRDadaRingBuffer::close_data_block end of data" << endl;
+
+#ifdef _DEBUG
+    cerr << "PSRDadaRingBuffer::close_data_block nsamps_read=" << nsamps_read<< endl;
+#endif
+
+}
