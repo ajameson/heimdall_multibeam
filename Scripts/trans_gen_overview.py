@@ -340,7 +340,7 @@ if __name__ == "__main__":
     parser.add_argument('-cands_file', default="all_candidates.dat")
     parser.add_argument('-nbeams', type=int, default=13)
     parser.add_argument('-snr_cut', type=float)
-    parser.add_argument('-beam_mask', type=int, default=(1<<13)-1)
+    parser.add_argument('-beam_mask', type=int, default=(1<<32)-1)
     parser.add_argument('-nbeams_cut', type=int, default=2)
     parser.add_argument('-members_cut', type=int, default=3)
     parser.add_argument('-dm_cut', type=float, default=1.5)
@@ -381,11 +381,11 @@ if __name__ == "__main__":
         np.loadtxt(filename,
                    dtype={'names': ('snr','samp_idx','time','filter',
                                     'dm_trial','dm','members','begin','end',
-                                    'nbeams','beam_mask','prim_beam',
+                                    'nbeams', 'prim_beam',
                                     'max_snr','beam'),
                           'formats': ('f4', 'i4', 'f4', 'i4',
                                       'i4', 'f4', 'i4', 'i4', 'i4',
-                                      'i4', 'i4', 'i4',
+                                      'i4', 'i4',
                                       'f4', 'i4')})
     # Adjust for 0-based indexing
     all_cands['prim_beam'] -= 1

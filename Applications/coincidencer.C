@@ -119,17 +119,20 @@ int main(int argc, char* argv[])
   bool continue_processing = true;
   int nfiles = (argc - optind);
 
-  if (port > 0)
-    server = new ServerSocket( (char *) address, port );
 
-  std::string server_hostname = server->get_hostname();
-  std::string server_service = server->get_service();
   char buffer[64];
   std::string prev_utc_start = "";
-
   time_t now = time(0);
   strftime (buffer, 64, HD_TIMESTR, localtime(&now));
-  cerr << "[" << buffer << "] listening for connections on " << server_hostname << ":" << server_service << endl;
+
+  if (port > 0)
+  {
+    server = new ServerSocket( (char *) address, port );
+
+    std::string server_hostname = server->get_hostname();
+    std::string server_service = server->get_service();
+    cerr << "[" << buffer << "] listening for connections on " << server_hostname << ":" << server_service << endl;
+  } 
 
   while ( continue_processing )
   {

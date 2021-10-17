@@ -165,7 +165,6 @@ void hd_print_usage()
 
   cout << "Usage: heimdall [options]" << endl;
   cout << "    -k  key                  use PSRDADA hexidecimal key" << endl;
-  cout << "    -f  filename             process specified SIGPROC filterbank file" << endl;
   cout << "    -vVgG                    increase verbosity level" << endl;
   cout << "    -yield_cpu               TBA" << endl;
   cout << "    -gpu_id ID               run on specified GPU" << endl;

@@ -16,6 +16,7 @@ extern "C" {
 #include "hd/error.h"
 
 hd_error hd_create_pipeline(hd_pipeline* pipeline, hd_params params);
+hd_error hd_preallocate(hd_pipeline pipeline, hd_size nsamps, hd_size nbeams);
 hd_size hd_get_max_overlap (hd_pipeline pl, hd_size nbeams);
 hd_error hd_execute(hd_pipeline pipeline,
                     const hd_byte* filterbank, hd_size nsamps, hd_size nbits,

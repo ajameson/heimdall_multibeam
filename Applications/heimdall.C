@@ -128,42 +128,39 @@ int main(int argc, char* argv[])
     cerr << "       " << hd_get_error_string(error) << endl;
     return -1;
   }
+
+  // Preallocate memory in the pipeline
   // --------------------------
+  error = hd_preallocate(pipeline, nsamps_gulp, params.nbeams);
+  if( error != HD_NO_ERROR ) {
+    cerr << "ERROR: Pipeline pre-allocation failed" << endl;
+    return -1;
+  }
   
+  size_t max_overlap = hd_get_max_overlap (pipeline, params.nbeams);
+  size_t filter_process_size = (nsamps_gulp + max_overlap) * stride;
+  if ( params.verbosity >= 1 )
+    cout << "allocating filterbank_process(" << filter_process_size << ")" << endl;
+  std::vector<hd_byte> filterbank_process(filter_process_size);
+
   if( params.verbosity >= 1 ) {
     cout << "Beginning data processing, requesting " << nsamps_gulp << " samples" << endl;
   }
 
-  size_t max_overlap = hd_get_max_overlap (pipeline, params.nbeams);
-  size_t filter_process_size = (nsamps_gulp + max_overlap) * stride;
-  if ( params.verbosity >= 2 )
-    cout << "allocating filterbank data vector..." << endl;
-  std::vector<hd_byte> filterbank_process1(filter_process_size);
-  std::vector<hd_byte> filterbank_process2(filter_process_size);
-
-  hd_byte * fb_curr = &filterbank_process1[0];
-  hd_byte * fb_next = &filterbank_process2[0];
-  hd_byte * fb_temp = 0;
-
   // start a timer for the whole pipeline
   //Stopwatch pipeline_timer;
 
+  // acquire the first block of data from the ring buffer
+  // read the first block o
   size_t total_nsamps = 0;
   char * filterbank = NULL;
   size_t nsamps_read = data_source->open_data_block (&filterbank);
+  
+  // for the first iteration only, can use the raw filterbank
+  hd_byte * fb_curr = (hd_byte *) filterbank;
+  hd_byte * fb_next = &filterbank_process[0];
 
-  // copy to filterbank_process if needed
-  if (params.nbeams > 1) 
-  {
-    // copy the entire block of filterbank data to fb_curr
-    std::copy (filterbank, filterbank + (stride*nsamps_gulp), &fb_curr[0]);
-    data_source->close_data_block (nsamps_read);
-  }
-  else
-  {
-    cerr << "Warning: this version of heimdall expects more than 1 beam" << endl;
-  }
-
+  data_source->close_data_block (nsamps_read);
   size_t overlap = 0;
 
   while( nsamps_read && !stop_requested )
@@ -180,7 +177,7 @@ int main(int argc, char* argv[])
     }     
     if (params.verbosity >= 2)
       fprintf (stderr, "filterbank=%p, nsamps_to_process=%d, nbits=%d "
-               "total_nsamps=%d params.nbeams=%d\n", &filterbank[0], 
+               "total_nsamps=%d params.nbeams=%d\n", (void *) fb_curr,
                nsamps_to_process, nbits, total_nsamps, params.nbeams);
 
     // overlap is overlap per beam
@@ -247,6 +244,8 @@ int main(int argc, char* argv[])
 #ifdef _DEBUG
       cerr << "[" << i << "] std::copy(" << curr_from << ", " << curr_to << ", " << next_from << ")" << endl;
 #endif
+      // note: on the first iteration, fb_curr points to the raw ring buffer,
+      //       on subsequent iterations, fb_curr and fb_next point to the same buffer
       std::copy (fb_curr + (stride * curr_from),
                  fb_curr + (stride * curr_to),
                  fb_next + (stride * next_from));
@@ -281,10 +280,8 @@ int main(int argc, char* argv[])
 
     data_source->close_data_block (nsamps_read);
 
-    // switch the pointers between curr/next
-    fb_temp = fb_curr;
+    // after the first iteration fb_curr now points to fb_next
     fb_curr = fb_next;
-    fb_next = fb_temp;
 
     if (params.verbosity >= 1)
       cerr << "end of loop nsamps_read=" << nsamps_read << " nsamps_gulp=" << nsamps_gulp << endl;

@@ -7,12 +7,14 @@
 
 #pragma once
 
+
+#include <dedisp.h>
+#include <climits>
+#include <cuda_runtime_api.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <dedisp.h>
-#include <cuda_runtime_api.h>
 
 typedef int hd_error;
 

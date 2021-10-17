@@ -29,6 +29,7 @@ using thrust::device_vector;
 #include "hd/pipeline.h"
 #include "hd/maths.h"
 
+#include "hd/clean_filterbank_rfi.h"
 #include "hd/remove_baseline.h"
 #include "hd/matched_filter.h"
 #include "hd/get_rms.h"
@@ -68,6 +69,9 @@ struct hd_pipeline_t {
   //MPI_Comm    communicator;
 
   // Memory buffers used during pipeline execution
+#ifdef CLEANING
+  std::vector<hd_byte>    h_clean_filterbank;
+#endif
   host_vector<hd_byte>    h_dm_series;
   device_vector<hd_float> d_time_series;
   device_vector<hd_float> d_filtered_series;
@@ -203,7 +207,7 @@ hd_error hd_create_pipeline(hd_pipeline* pipeline_, hd_params params) {
          << THRUST_MINOR_VERSION << "."
          << THRUST_SUBMINOR_VERSION << endl;
   }
-  
+
   return HD_NO_ERROR;
 }
 
@@ -214,6 +218,18 @@ hd_size hd_get_max_overlap (hd_pipeline pl, hd_size nbeams)
   return max_overlap;
 }
 
+hd_error hd_preallocate(hd_pipeline pl, hd_size nsamps, hd_size nbeams)
+{
+  hd_size max_alloc = nsamps + hd_get_max_overlap (pl, nbeams);
+  hd_size dm_count = dedisp_get_dm_count(pl->dedispersion_plan);
+  if (pl->params.verbosity >= 1)
+    cout << "pre allocating arrays h_dm_series.resize(" << max_alloc * pl->params.dm_nbits/8 * dm_count << ")" << endl;
+  pl->h_dm_series.resize(max_alloc * pl->params.dm_nbits/8 * dm_count, 0);
+  pl->d_time_series.resize(max_alloc, 0);
+  pl->d_filtered_series.resize(max_alloc, 0);
+  return HD_NO_ERROR;
+}
+
 hd_error hd_execute(hd_pipeline pl,
                     const hd_byte* h_filterbank, hd_size nsamps, hd_size nbits,
                     hd_size first_idx, hd_size nbeams, hd_size* nsamps_processed) {
@@ -221,6 +237,7 @@ hd_error hd_execute(hd_pipeline pl,
   
   Stopwatch total_timer;
   Stopwatch memory_timer;
+  Stopwatch clean_timer;
   Stopwatch dedisp_timer;
   Stopwatch communicate_timer;
   Stopwatch copy_timer;
@@ -232,12 +249,56 @@ hd_error hd_execute(hd_pipeline pl,
   Stopwatch candidates_timer;
   
   start_timer(total_timer);
-  
-  hd_size nbytes = nsamps * pl->params.nchans * nbits / 8;
+
+  // Note: Filterbank cleaning must be done out-of-place
   start_timer(memory_timer);
-  std::vector<int>          h_killmask(pl->params.nchans, 1);
+#ifdef CLEANING
+  hd_size nbytes = nsamps * pl->params.nchans * nbits / 8;
+  pl->h_clean_filterbank.resize(nbytes);
+#endif
+  std::vector<int> h_killmask(pl->params.nchans, 1);
   stop_timer(memory_timer);
-  
+
+  start_timer(clean_timer);
+#ifdef CLEANING
+  if( pl->params.verbosity >= 2 ) {
+    cout << "\tCleaning 0-DM filterbank..." << endl;
+  }
+
+  // Start by cleaning up the filterbank based on the zero-DM time series
+  hd_float cleaning_dm = 0.f;
+  if( pl->params.verbosity >= 3 ) {
+    /*
+    cout << "\tWriting dirty filterbank to disk..." << endl;
+    write_host_filterbank(&h_filterbank[0],
+                          pl->params.nchans, nsamps, nbits,
+                          pl->params.dt, pl->params.f0, pl->params.df,
+                          "dirty_filterbank.fil");
+    */
+  }
+
+  // Note: We only clean the narrowest zero-DM signals; otherwise we
+  //         start removing real stuff from higher DMs.
+  error = clean_filterbank_rfi(pl->dedispersion_plan,
+                               &h_filterbank[0],
+                               nsamps,
+                               nbits,
+                               &pl->h_clean_filterbank[0],
+                               &h_killmask[0],
+                               cleaning_dm,
+                               pl->params.dt,
+                               pl->params.baseline_length,
+                               pl->params.rfi_tol,
+                               pl->params.rfi_min_beams,
+                               64,//pl->params.boxcar_max,
+                               nbeams);
+  if( error != HD_NO_ERROR ) {
+    return throw_error(error);
+  }
+
+#endif
+
+
   if( pl->params.verbosity >= 2 ) {
     cout << "Applying manual killmasks" << endl;
   }
@@ -257,6 +318,8 @@ hd_error hd_execute(hd_pipeline pl,
     cout << "Bad channel count = " << bad_chan_count << endl;
   }
   
+  stop_timer(clean_timer);
+
   if( pl->params.verbosity >= 2 ) {
     cout << "\tGenerating DM list..." << endl;
   }
@@ -330,19 +393,28 @@ hd_error hd_execute(hd_pipeline pl,
     cerr << "pl->h_dm_series.resize(" << series_stride * pl->params.dm_nbits/8 * dm_count << ")" << endl;
   }
 
+  pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count, 0);
+  pl->d_time_series.resize(series_stride, 0);
+  pl->d_filtered_series.resize(series_stride, 0);
+
+  /*
   if (first_idx == 0)
   {
     hd_size overallocation = nsamps + hd_get_max_overlap (pl, nbeams);
+    cerr << "first_idx == 0 overallocation=" << nsamps + hd_get_max_overlap (pl, nbeams) << " nsamps=" << nsamps << " hd_get_max_overlap (pl, nbeams)=" <<
+      hd_get_max_overlap (pl, nbeams) << endl;
     pl->h_dm_series.resize(overallocation * pl->params.dm_nbits/8 * dm_count, 0);
     pl->d_time_series.resize(overallocation, 0);
     pl->d_filtered_series.resize(overallocation, 0);
   }
   else
   {
+    cerr << "first_idx != 0 series_stride=" <<series_stride << endl;
     pl->h_dm_series.resize(series_stride * pl->params.dm_nbits/8 * dm_count, 0);
     pl->d_time_series.resize(series_stride, 0);
     pl->d_filtered_series.resize(series_stride, 0);
   }
+  */
   
   stop_timer(memory_timer);
   
@@ -372,7 +444,11 @@ hd_error hd_execute(hd_pipeline pl,
   
   // Dedisperse
   dedisp_error       derror;
+#ifdef CLEANING
+  const dedisp_byte* in = &pl->h_clean_filterbank[0];
+#else
   const dedisp_byte* in = &h_filterbank[0];
+#endif
   dedisp_byte*       out = &pl->h_dm_series[0];
   dedisp_size        in_nbits = nbits;
   dedisp_size        in_stride = pl->params.nchans * in_nbits/8;
@@ -652,7 +728,6 @@ hd_error hd_execute(hd_pipeline pl,
       
       start_timer(giants_timer);
 
-#define IGNORE_BEAM_001
 #ifdef IGNORE_BEAM_001
       if (pl->params.beam == 0)
       {
@@ -977,6 +1052,7 @@ hd_error hd_execute(hd_pipeline pl,
   if( pl->params.verbosity >= 1 )
   {
     cout << "Mem alloc time:          " << memory_timer.getTime() << endl;
+    cout << "0-DM cleaning time:      " << clean_timer.getTime() << endl;
     cout << "Dedispersion time:       " << dedisp_timer.getTime() << endl;
     cout << "Copy time:               " << copy_timer.getTime() << endl;
     cout << "Baselining time:         " << baseline_timer.getTime() << endl;
@@ -988,6 +1064,7 @@ hd_error hd_execute(hd_pipeline pl,
   }
 
   hd_float time_sum = (memory_timer.getTime() +
+                       clean_timer.getTime() +
                        dedisp_timer.getTime() +
                        copy_timer.getTime() +
                        baseline_timer.getTime() +
@@ -998,6 +1075,8 @@ hd_error hd_execute(hd_pipeline pl,
   hd_float misc_time = total_timer.getTime() - time_sum;
   
 #endif // HD_BENCHMARK
+
+  cout << "Dump: " << std::string(buffer) << " Total Time: " << total_timer.getTime() << endl;
   
   if( too_many_giants ) {
     return HD_TOO_MANY_EVENTS;

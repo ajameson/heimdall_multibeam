@@ -1,16 +1,33 @@
 
 include $(top_srcdir)/cuda.mk
 
-INCLUDES = -I$(top_srcdir)/src
-
 lib_LTLIBRARIES = libhdpipeline.la
 
-libhdpipeline_la_SOURCES = default_params.C error.C parse_command_line.C clean_filterbank_rfi.cu get_rms.cu matched_filter.cu remove_baseline.cu find_giants.cu label_candidate_clusters.cu merge_candidates.cu pipeline.cu measure_bandpass.cu median_filter.cu matched_filter.cu
+libhdpipeline_la_SOURCES = \
+  clean_filterbank_rfi.cu \
+  default_params.C \
+  error.C \
+  find_giants.cu \
+  get_rms.cu \
+  label_candidate_clusters.cu \
+  matched_filter.cu \
+  measure_bandpass.cu \
+  median_filter.cu \
+  merge_candidates.cu \
+  parse_command_line.C \
+  pipeline.cu \
+  remove_baseline.cu
 
-nobase_include_HEADERS = hd/median_filter.h hd/error.h hd/types.h
+nobase_include_HEADERS = \
+  hd/error.h \
+  hd/median_filter.h \
+  hd/types.h
 
 # To find the dedisp lib from bbarsdell
-AM_CPPFLAGS = -I../ -I../Network -I../Formats @DEDISP_CFLAGS@ @THRUST_CFLAGS@ @CUDA_CFLAGS@
+AM_CPPFLAGS = \
+  -I$(top_srcdir)/Network \
+  -I$(top_srcdir)/Formats \
+  @DEDISP_CFLAGS@ @THRUST_CFLAGS@ @CUDA_CFLAGS@ $(BOOST_CPPFLAGS)
 
 if HAVE_PSRDADA
 AM_CPPFLAGS += @PSRDADA_CFLAGS@

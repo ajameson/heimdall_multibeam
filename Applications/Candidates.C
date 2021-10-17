@@ -70,9 +70,9 @@ bool Candidate::is_coincident(const Candidate * c, const unsigned sep_time, cons
   const int64_t tol = sep_time * powf(2,max(c->filter,filter));
 
   // change temporal coincidence on bens suggestion 6/8/2012
-  return ( (abs(c->sample_idx - sample_idx) <= tol) &&
-           (abs(c->dm_trial - dm_trial) <= sep_dm) &&
-           (abs(c->filter - filter) <= sep_filter) &&
+  return ( (abs(int64_t(c->sample_idx) - int64_t(sample_idx)) <= tol) &&
+           (abs(int(c->dm_trial) - int(dm_trial)) <= sep_dm) &&
+           (abs(int(c->filter) - int(filter)) <= sep_filter) &&
            ((fabsf(c->snr - snr) / (c->snr + snr)) <= sep_snr));
 }
 

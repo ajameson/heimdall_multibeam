@@ -26,7 +26,9 @@
 #include <thrust/iterator/constant_iterator.h>
 
 // TESTING ONLY
-//#include "hd/write_time_series.h"
+#ifdef _DEBUG
+#include "hd/write_time_series.h"
+#endif
 
 // A simple hashing function taken from Thrust's Monte Carlo example
 inline __host__ __device__
@@ -403,8 +405,10 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
   hd_size nsamps_smooth = hd_size(baseline_length / (2 * dt));
   hd_float* d_series_ptr = thrust::raw_pointer_cast(&d_series[0]);
   
-  //write_device_time_series(d_series_ptr, nsamps_computed,
-  //                         dt, "dm0_dedispersed.tim");
+#ifdef _DEBUG
+  write_device_time_series(d_series_ptr, nsamps_computed,
+                           dt, "dm0_dedispersed.tim");
+#endif
   
   RemoveBaselinePlan baseline_remover;
   error = baseline_remover.exec(d_series_ptr, beam_stride, beam_nsamps, nsamps_smooth, nbeams);
@@ -412,17 +416,32 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
     return throw_error(error);
   }
   
-  //write_device_time_series(d_series_ptr, nsamps_computed,
-  //                         dt, "dm0_baselined.tim");
+#ifdef _DEBUG
+  write_device_time_series(d_series_ptr, nsamps_computed,
+                           dt, "dm0_baselined.tim");
+#endif
   
-  // Normalise
-  error = normalise(d_series_ptr, nsamps_computed);
+  thrust::device_vector<hd_float> d_beam_rms;
+  d_beam_rms.resize(nbeams);
+  hd_float* beam_rms = thrust::raw_pointer_cast(&d_beam_rms[0]);
+
+  // multibeam normalisation, first get the RMS of each beam
+  GetRMSPlanMB rms_getter;
+  error = rms_getter.exec_multibeam(d_series_ptr, beam_rms, beam_stride, beam_nsamps, nbeams);
   if( error != HD_NO_ERROR ) {
     return throw_error(error);
   }
-  
-  //write_device_time_series(d_series_ptr, nsamps_computed,
-  //                         dt, "dm0_normalised.tim");
+
+  // normalise each beam with each RMS
+  error = normalise_multibeam (d_series_ptr, beam_rms, beam_stride, nsamps_computed, nbeams);
+  if( error != HD_NO_ERROR ) {
+    return throw_error(error);
+  }
+
+#ifdef _DEBUG
+  write_device_time_series(d_series_ptr, nsamps_computed,
+                           dt, "dm0_normalised.tim");
+#endif
   // -------------------------------------------
   
   // Do a simple sigma cut to identify RFI
@@ -500,6 +519,11 @@ hd_error clean_filterbank_rfi(dedisp_plan    main_plan,
     return error;
   }
   
+#ifdef _DEBUG
+  write_host_time_series((unsigned int*) &h_in_copy[0], nsamps_computed, nbits, dt, "dm0_dirty.tim");
+  write_host_time_series((unsigned int*) &h_out[0], nsamps_computed, nbits, dt, "dm0_cleaned.tim");
+#endif
+
   return HD_NO_ERROR;
 }
 
